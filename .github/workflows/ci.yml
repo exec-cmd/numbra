@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: uv sync --all-groups
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest
+      - run: uv build
+      - name: Install wheel in a clean environment
+        run: |
+          python -m venv /tmp/numbra-clean
+          /tmp/numbra-clean/bin/python -m pip install --quiet dist/*.whl
+          /tmp/numbra-clean/bin/numbra --help
+          /tmp/numbra-clean/bin/numbra --version
+          XDG_CONFIG_HOME=/tmp/numbra-ci-config XDG_DATA_HOME=/tmp/numbra-ci-data /tmp/numbra-clean/bin/numbra results --limit 1

@@ -1,0 +1,47 @@
+[project]
+name = "numbra"
+version = "0.1.0"
+description = "CLI program for level up in mental arithmetic"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "cmd.exe" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "platformdirs>=4.5.0",
+    "prompt-toolkit>=3.0.52",
+    "rich>=15.0.0",
+    "typer>=0.27.2",
+]
+
+[project.scripts]
+numbra = "numbra:main"
+
+[build-system]
+requires = ["uv_build>=0.12.7,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.5",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.13"
+disallow_untyped_defs = true
+check_untyped_defs = true
+files = ["src"]
