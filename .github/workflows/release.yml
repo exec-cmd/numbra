@@ -32,6 +32,12 @@ jobs:
           uv run pytest
       - name: Build
         run: uv build
+      - name: Smoke test wheel
+        run: |
+          python -m venv /tmp/numbra-release-clean
+          /tmp/numbra-release-clean/bin/python -m pip install --quiet dist/*.whl
+          /tmp/numbra-release-clean/bin/numbra --version
+          /tmp/numbra-release-clean/bin/numbra challenge --help
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
