@@ -36,6 +36,8 @@ def test_new_difficulty_profiles_and_operation_timing_are_loaded(tmp_path: Path)
     assert settings.challenge.difficulty.value == "normal"
     assert settings.challenge.profiles["very-easy"].max_value == 10
     assert settings.challenge.profiles["very-hard"].max_value == 999
+    assert settings.challenge.profiles["very-easy"].max_result == 20
+    assert settings.challenge.profiles["very-hard"].max_result == 10_000
     assert settings.challenge.operation_timing.enabled is True
     assert settings.challenge.operation_timing.bonus_seconds["*"] == 1.0
 

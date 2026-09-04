@@ -71,7 +71,9 @@ def _parse_settings(
         difficulty = Difficulty(challenge.get("difficulty", Difficulty.NORMAL))
         seed_value = challenge.get("seed")
         seed = None if seed_value is None else int(seed_value)
-        operation_values = challenge.get("operations", [item.value for item in Operation])
+        operation_values = challenge.get(
+            "operations", [item.value for item in Operation if item is not Operation.POWER]
+        )
         operations = tuple(Operation(value) for value in operation_values)
     except (TypeError, ValueError) as exc:
         raise ConfigError(f"{paths.main.name}: invalid challenge field: {exc}") from exc
@@ -132,11 +134,11 @@ def _parse_stage_limits(value: Any, paths: ConfigPaths) -> dict[StageKind, float
 
 def _parse_profiles(value: Any, paths: ConfigPaths) -> dict[Difficulty, DifficultyConfig]:
     defaults = {
-        Difficulty.VERY_EASY: (1, 10, 2, 2),
-        Difficulty.EASY: (1, 20, 2, 2),
-        Difficulty.NORMAL: (2, 50, 2, 3),
-        Difficulty.HARD: (5, 150, 2, 3),
-        Difficulty.VERY_HARD: (10, 999, 3, 4),
+        Difficulty.VERY_EASY: (1, 10, 2, 2, 20),
+        Difficulty.EASY: (1, 20, 2, 2, 100),
+        Difficulty.NORMAL: (2, 50, 2, 3, 500),
+        Difficulty.HARD: (5, 150, 3, 4, 3_000),
+        Difficulty.VERY_HARD: (10, 999, 3, 4, 10_000),
     }
     if not isinstance(value, dict):
         raise ConfigError(f"{paths.main.name}: difficulties must be a table")
@@ -149,13 +151,14 @@ def _parse_profiles(value: Any, paths: ConfigPaths) -> dict[Difficulty, Difficul
                 "max_value",
                 "min_terms",
                 "max_terms",
+                "max_result",
             }:
                 raise ValueError(f"unknown field difficulties.{level.value}")
             profile = DifficultyConfig(
                 *(
                     int(raw.get(name, default))
                     for name, default in zip(
-                        ("min_value", "max_value", "min_terms", "max_terms"),
+                        ("min_value", "max_value", "min_terms", "max_terms", "max_result"),
                         defaults[level],
                         strict=True,
                     )
@@ -165,6 +168,8 @@ def _parse_profiles(value: Any, paths: ConfigPaths) -> dict[Difficulty, Difficul
                 raise ValueError(f"difficulties.{level.value} has invalid value range")
             if profile.min_terms < 2 or profile.max_terms < profile.min_terms:
                 raise ValueError(f"difficulties.{level.value} has invalid term range")
+            if profile.max_result < 1:
+                raise ValueError(f"difficulties.{level.value}.max_result must be positive")
             profiles[level] = profile
     except (TypeError, ValueError) as exc:
         raise ConfigError(f"{paths.main.name}: invalid difficulties field: {exc}") from exc
@@ -180,17 +185,14 @@ def _parse_timing(value: Any, paths: ConfigPaths) -> OperationTimingConfig:
     }:
         raise ConfigError(f"{paths.main.name}: unknown field timing")
     enabled = value.get("operation_bonus_enabled", True)
-    bonuses = value.get("operation_bonus_seconds", ChallengeConfig().operation_timing.bonus_seconds)
+    defaults = ChallengeConfig().operation_timing.bonus_seconds
+    bonuses = value.get("operation_bonus_seconds", defaults)
     if not isinstance(enabled, bool) or not isinstance(bonuses, dict):
         raise ConfigError(f"{paths.main.name}: invalid timing field")
     try:
-        parsed = {Operation(key): float(raw) for key, raw in bonuses.items()}
+        parsed = defaults | {Operation(key): float(raw) for key, raw in bonuses.items()}
     except (TypeError, ValueError) as exc:
         raise ConfigError(f"{paths.main.name}: invalid timing operation field: {exc}") from exc
-    if set(parsed) != set(Operation):
-        raise ConfigError(
-            f"{paths.main.name}: timing.operation_bonus_seconds must define all operations"
-        )
     if any(not math.isfinite(seconds) or seconds < 0 for seconds in parsed.values()):
         raise ConfigError(f"{paths.main.name}: timing bonuses must be non-negative")
     return OperationTimingConfig(enabled, parsed)

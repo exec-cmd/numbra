@@ -1,6 +1,6 @@
 """Domain services for numbra."""
 
-from .generator import DifficultyProfile, ProblemGenerator
+from .generator import DifficultyProfile, GenerationError, ProblemGenerator, canonical_problem_key
 from .models import Difficulty, Operation, Problem, StageKind
 from .stages import allocate_stage_kinds
 
@@ -9,9 +9,11 @@ __all__ = [
     "ChallengeOptions",
     "Difficulty",
     "DifficultyProfile",
+    "GenerationError",
     "Operation",
     "Problem",
     "ProblemGenerator",
+    "canonical_problem_key",
     "StageKind",
     "Stats",
     "TrainingSession",

@@ -11,6 +11,7 @@ class DifficultyConfig:
     max_value: int
     min_terms: int
     max_terms: int
+    max_result: int = 10_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,13 +29,17 @@ def _default_stage_limits() -> dict[StageKind, float]:
     return {StageKind.FAST: 5.0, StageKind.NORMAL: 10.0, StageKind.SLOW: 15.0}
 
 
+def _default_operations() -> tuple[Operation, ...]:
+    return tuple(operation for operation in Operation if operation is not Operation.POWER)
+
+
 def _default_profiles() -> dict[Difficulty, DifficultyConfig]:
     return {
-        Difficulty.VERY_EASY: DifficultyConfig(1, 10, 2, 2),
-        Difficulty.EASY: DifficultyConfig(1, 20, 2, 2),
-        Difficulty.NORMAL: DifficultyConfig(2, 50, 2, 3),
-        Difficulty.HARD: DifficultyConfig(5, 150, 2, 3),
-        Difficulty.VERY_HARD: DifficultyConfig(10, 999, 3, 4),
+        Difficulty.VERY_EASY: DifficultyConfig(1, 10, 2, 2, 20),
+        Difficulty.EASY: DifficultyConfig(1, 20, 2, 2, 100),
+        Difficulty.NORMAL: DifficultyConfig(2, 50, 2, 3, 500),
+        Difficulty.HARD: DifficultyConfig(5, 150, 3, 4, 3_000),
+        Difficulty.VERY_HARD: DifficultyConfig(10, 999, 3, 4, 10_000),
     }
 
 
@@ -44,7 +49,7 @@ class ChallengeConfig:
     difficulty: Difficulty = Difficulty.NORMAL
     stages: int = 3
     seed: int | None = None
-    operations: tuple[Operation, ...] = tuple(Operation)
+    operations: tuple[Operation, ...] = field(default_factory=_default_operations)
     stage_limits: dict[StageKind, float] = field(default_factory=_default_stage_limits)
     profiles: dict[Difficulty, DifficultyConfig] = field(default_factory=_default_profiles)
     operation_timing: OperationTimingConfig = field(
@@ -55,6 +60,7 @@ class ChallengeConfig:
                 Operation.SUBTRACT: 0.0,
                 Operation.MULTIPLY: 1.0,
                 Operation.DIVIDE: 2.0,
+                Operation.POWER: 3.0,
             },
         )
     )

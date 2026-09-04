@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
@@ -18,6 +19,7 @@ class Operation(StrEnum):
     SUBTRACT = "-"
     MULTIPLY = "*"
     DIVIDE = "/"
+    POWER = "^"
 
 
 class StageKind(StrEnum):
@@ -33,17 +35,29 @@ class Problem:
     operations: tuple[Operation, ...]
 
     def evaluate(self) -> int | Decimal:
-        values = self.expression.split()
-        result: int | Decimal = int(values[0])
-        for index in range(1, len(values), 2):
-            operation = Operation(values[index])
-            operand = int(values[index + 1])
-            if operation is Operation.ADD:
-                result += operand
-            elif operation is Operation.SUBTRACT:
-                result -= operand
-            elif operation is Operation.MULTIPLY:
-                result *= operand
-            else:
-                result //= operand
-        return result
+        parsed = ast.parse(self.expression.replace("^", "**"), mode="eval")
+        return _evaluate_ast(parsed.body)
+
+
+def _evaluate_ast(node: ast.expr) -> int:
+    if isinstance(node, ast.Constant) and isinstance(node.value, int):
+        return node.value
+    if not isinstance(node, ast.BinOp):
+        raise ValueError("expression contains an unsupported value")
+    left = _evaluate_ast(node.left)
+    right = _evaluate_ast(node.right)
+    if isinstance(node.op, ast.Add):
+        return left + right
+    if isinstance(node.op, ast.Sub):
+        return left - right
+    if isinstance(node.op, ast.Mult):
+        return left * right
+    if isinstance(node.op, ast.Div):
+        if right == 0 or left % right:
+            raise ValueError("division must be exact and non-zero")
+        return left // right
+    if isinstance(node.op, ast.Pow):
+        if right < 0 or right > 3:
+            raise ValueError("powers must use an exponent from 0 to 3")
+        return left**right
+    raise ValueError("expression contains an unsupported operation")
