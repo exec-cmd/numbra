@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from datetime import datetime
 from typing import Annotated
@@ -9,11 +10,14 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from .config import ConfigError, ConfigManager, default_database_path
-from .core.challenge import Challenge, ChallengeOptions
-from .core.models import Difficulty, Operation, StageKind
-from .core.stats import Stats
+from ..config import ConfigError, ConfigManager, default_database_path, default_log_path
+from ..core.challenge import Challenge, ChallengeOptions, TrainingSession
+from ..core.models import Difficulty, Operation, StageKind
+from ..core.stats import Stats
+from .input import timed_prompt
+from .logging import configure_logging
 
+logger = logging.getLogger(__name__)
 console = Console()
 app = typer.Typer(
     add_completion=False,
@@ -35,24 +39,12 @@ def _parse_operations(value: str | None) -> tuple[Operation, ...] | None:
         raise ValueError(f"unsupported operation; use +,-,*,/ ({exc})") from exc
 
 
-async def _prompt_async(text: str, timeout: float) -> str | None:
-    try:
-        from prompt_toolkit import PromptSession
-    except ImportError:
-        return input(text)
-    session = PromptSession()
-    try:
-        return await asyncio.wait_for(session.prompt_async(text), timeout=timeout)
-    except TimeoutError:
-        return None
-
-
 @app.callback()
 def callback(
-    version: Annotated[
-        bool, typer.Option("--version", help="Show the installed version and exit.")
-    ] = False,
+    version: Annotated[bool, typer.Option("--version", help="Show version and exit.")] = False,
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Show log messages.")] = False,
 ) -> None:
+    configure_logging(default_log_path(), verbose)
     if version:
         console.print("numbra 0.1.0")
         raise typer.Exit()
@@ -61,28 +53,27 @@ def callback(
 @app.command()
 def challenge(
     duration: Annotated[
-        int | None, typer.Option(help="Target duration in minutes (default: config, 6).", min=1)
+        int | None, typer.Option("-t", "--duration", help="Target duration in minutes.", min=1)
     ] = None,
     difficulty: Annotated[
-        Difficulty | None, typer.Option(help="Difficulty: easy, normal, or hard.")
+        Difficulty | None, typer.Option("-d", "--difficulty", help="Difficulty level.")
     ] = None,
-    seed: Annotated[
-        int | None, typer.Option(help="Integer seed for reproducible training.")
-    ] = None,
+    seed: Annotated[int | None, typer.Option("-S", "--seed", help="Integer seed.")] = None,
     operations: Annotated[
-        str | None, typer.Option(help="Comma-separated operations: +,-,*,/.")
+        str | None, typer.Option("-o", "--operations", help="Comma-separated operations.")
     ] = None,
     stages: Annotated[
-        int | None, typer.Option(help="Number of stages (default: 3).", min=1)
+        int | None, typer.Option("-n", "--stages", help="Number of stages.", min=1)
     ] = None,
 ) -> None:
     try:
         selected_operations = _parse_operations(operations)
         settings = ConfigManager().load_or_create()
-        session = Challenge(settings).create_session(
+        session: TrainingSession = Challenge(settings).create_session(
             ChallengeOptions(duration, difficulty, seed, selected_operations, stages)
         )
     except (ConfigError, ValueError) as exc:
+        logger.error("Unable to start challenge: %s", exc)
         console.print(f"[red]Configuration error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
     kinds = ", ".join(
@@ -97,11 +88,13 @@ def challenge(
     try:
         for stage_index, stage in enumerate(session.stages):
             console.print(
-                f"\n[bold cyan]Stage {stage.number}/{len(session.stages)}[/bold cyan] · {stage.kind.value} · {len(stage.problems)} examples · {stage.limit_seconds:g}s each"
+                f"\n[bold cyan]Stage {stage.number}/{len(session.stages)}[/bold cyan] · {stage.kind.value} · {len(stage.problems)} examples"
             )
             for problem_index, problem in enumerate(stage.problems):
+                limit = session.time_limit_for(stage_index, problem_index)
+                console.print(f"Limit for this example: {limit:g}s")
                 before = time.monotonic()
-                answer = asyncio.run(_prompt_async(f"{problem.expression} = ", stage.limit_seconds))
+                answer = asyncio.run(timed_prompt(f"{problem.expression} = ", limit))
                 elapsed = time.monotonic() - before
                 attempt = session.submit(
                     stage_index, problem_index, answer, elapsed, answer is None
@@ -114,10 +107,12 @@ def challenge(
                     console.print(f"[red]Incorrect[/red] (answer: {problem.answer})")
     except (KeyboardInterrupt, EOFError):
         session.cancel()
+        logger.info("Challenge cancelled")
         console.print("\n[yellow]Challenge cancelled. Nothing was saved.[/yellow]")
         raise typer.Exit(code=130) from None
     completed = session.complete(time.monotonic() - started)
-    Stats(default_database_path()).save(completed)
+    training_id = Stats(default_database_path()).save(completed)
+    logger.info("Challenge %s saved with %s attempts", training_id, len(completed.attempts))
     console.print(
         f"\n[bold]Result:[/bold] {completed.correct_answers}/{completed.total_examples} correct ({completed.accuracy:.1%}), {completed.timeouts} timeouts, average {completed.average_response_seconds:.2f}s"
     )
@@ -130,7 +125,8 @@ def challenge(
         kind_total = sum(len(stage.problems) for stage in completed.stages if stage.kind is kind)
         if kind_total:
             console.print(
-                f"{kind.value}: {sum(item.is_correct for item in kind_attempts)}/{kind_total} correct, {sum(item.timed_out for item in kind_attempts)} timeouts"
+                f"{kind.value}: {sum(item.is_correct for item in kind_attempts)}/{kind_total} correct, "
+                f"{sum(item.timed_out for item in kind_attempts)} timeouts"
             )
     operation_totals: dict[Operation, list[int]] = {}
     for attempt in completed.attempts:
@@ -151,9 +147,24 @@ def challenge(
 
 @app.command()
 def results(
-    limit: Annotated[int, typer.Option(help="Number of history rows to show.", min=1)] = 10,
+    limit: Annotated[
+        int, typer.Option("-l", "--limit", help="Number of history rows.", min=1)
+    ] = 10,
+    reset: Annotated[bool, typer.Option("-r", "--reset", help="Delete all saved results.")] = False,
+    yes: Annotated[bool, typer.Option("-y", "--yes", help="Skip reset confirmation.")] = False,
 ) -> None:
+    if yes and not reset:
+        console.print("[red]Error:[/red] --yes can only be used with --reset")
+        raise typer.Exit(code=2)
     stats = Stats(default_database_path())
+    if reset:
+        if not yes and not typer.confirm("Delete all completed challenge results?", default=False):
+            console.print("Reset cancelled.")
+            return
+        stats.reset()
+        logger.info("All challenge results reset")
+        console.print("All challenge results were deleted.")
+        return
     rows = stats.history(limit)
     if not rows:
         console.print("No completed challenges yet.")
@@ -192,8 +203,8 @@ def results(
         console.print(
             "Operations: "
             + ", ".join(
-                f"{operation} {correct}/{total}"
-                for operation, (total, correct) in sorted(aggregate.by_operation.items())
+                f"{op} {correct}/{total}"
+                for op, (total, correct) in sorted(aggregate.by_operation.items())
             )
         )
     if aggregate.by_difficulty:

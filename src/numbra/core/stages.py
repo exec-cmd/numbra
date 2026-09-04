@@ -3,9 +3,11 @@ from __future__ import annotations
 from .models import Difficulty, StageKind
 
 _WEIGHTS = {
+    Difficulty.VERY_EASY: {StageKind.FAST: 0, StageKind.NORMAL: 0, StageKind.SLOW: 3},
     Difficulty.EASY: {StageKind.FAST: 0, StageKind.NORMAL: 1, StageKind.SLOW: 2},
     Difficulty.NORMAL: {StageKind.FAST: 1, StageKind.NORMAL: 1, StageKind.SLOW: 1},
     Difficulty.HARD: {StageKind.FAST: 2, StageKind.NORMAL: 1, StageKind.SLOW: 0},
+    Difficulty.VERY_HARD: {StageKind.FAST: 3, StageKind.NORMAL: 0, StageKind.SLOW: 0},
 }
 
 

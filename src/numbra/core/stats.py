@@ -68,7 +68,9 @@ class Stats:
                     training.average_response_seconds,
                 ),
             )
-            training_id = int(cursor.lastrowid)
+            if cursor.lastrowid is None:
+                raise RuntimeError("SQLite did not return a training id")
+            training_id = cursor.lastrowid
             for stage in training.stages:
                 stage_attempts = [
                     item for item in training.attempts if item.stage_number == stage.number
@@ -83,7 +85,9 @@ class Stats:
                         sum(item.elapsed_seconds for item in stage_attempts),
                     ),
                 )
-                stage_id = int(stage_cursor.lastrowid)
+                if stage_cursor.lastrowid is None:
+                    raise RuntimeError("SQLite did not return a stage id")
+                stage_id = stage_cursor.lastrowid
                 for attempt in stage_attempts:
                     connection.execute(
                         "INSERT INTO attempts(stage_id, number, expression, correct_answer, user_answer, is_correct, elapsed, timed_out, operation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -100,6 +104,13 @@ class Stats:
                         ),
                     )
             return training_id
+
+    def reset(self) -> None:
+        """Delete all saved training data while retaining the database schema."""
+        with self._connect() as connection:
+            connection.execute("DELETE FROM attempts")
+            connection.execute("DELETE FROM stages")
+            connection.execute("DELETE FROM trainings")
 
     def history(self, limit: int = 10) -> list[TrainingRecord]:
         with self._connect() as connection:

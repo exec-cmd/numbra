@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 
-from ..config import Settings
+from ..config import OperationTimingConfig, Settings
 from .generator import DifficultyProfile, ProblemGenerator
 from .models import Difficulty, Operation, Problem, StageKind
 from .stages import allocate_stage_kinds
@@ -86,6 +86,7 @@ class TrainingSession:
         operations: tuple[Operation, ...],
         target_seconds: float,
         stages: tuple[StagePlan, ...],
+        operation_timing: OperationTimingConfig,
     ) -> None:
         self.started_at = started_at
         self.difficulty = difficulty
@@ -93,8 +94,15 @@ class TrainingSession:
         self.operations = operations
         self.target_seconds = target_seconds
         self.stages = stages
+        self.operation_timing = operation_timing
         self._attempts: dict[tuple[int, int], AnswerAttempt] = {}
         self._cancelled = False
+
+    def time_limit_for(self, stage_number: int, problem_number: int) -> float:
+        problem = self.stages[stage_number].problems[problem_number]
+        return self.stages[stage_number].limit_seconds + self.operation_timing.bonus_for(
+            problem.operations
+        )
 
     def submit(
         self,
@@ -191,6 +199,7 @@ class Challenge:
             operations=operations,
             target_seconds=duration * 60,
             stages=tuple(plans),
+            operation_timing=config.operation_timing,
         )
 
 

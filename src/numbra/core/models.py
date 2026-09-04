@@ -6,9 +6,11 @@ from enum import StrEnum
 
 
 class Difficulty(StrEnum):
+    VERY_EASY = "very-easy"
     EASY = "easy"
     NORMAL = "normal"
     HARD = "hard"
+    VERY_HARD = "very-hard"
 
 
 class Operation(StrEnum):
