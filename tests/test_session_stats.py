@@ -57,13 +57,5 @@ def test_stats_reset_removes_history_but_keeps_schema(tmp_path: Path) -> None:
 
 
 def test_all_difficulty_distributions_have_exact_stage_count() -> None:
-    assert allocate_stage_kinds(Difficulty.VERY_EASY, 3).count(StageKind.SLOW) == 3
-    assert allocate_stage_kinds(Difficulty.EASY, 3) == (
-        StageKind.NORMAL,
-        StageKind.SLOW,
-        StageKind.SLOW,
-    )
-    assert allocate_stage_kinds(Difficulty.HARD, 3).count(StageKind.FAST) == 2
-    assert allocate_stage_kinds(Difficulty.VERY_HARD, 3).count(StageKind.FAST) == 3
-    for difficulty in Difficulty:
-        assert len(allocate_stage_kinds(difficulty, 7)) == 7
+    assert allocate_stage_kinds(3) == (StageKind.FAST, StageKind.NORMAL, StageKind.SLOW)
+    assert len(allocate_stage_kinds(7)) == 7

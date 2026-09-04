@@ -4,7 +4,9 @@ CREATE TABLE IF NOT EXISTS trainings (
     status TEXT NOT NULL, difficulty TEXT NOT NULL, seed INTEGER NOT NULL,
     operations TEXT NOT NULL, target_seconds REAL NOT NULL, actual_seconds REAL NOT NULL,
     stages INTEGER NOT NULL, total_examples INTEGER NOT NULL, correct_answers INTEGER NOT NULL,
-    timeouts INTEGER NOT NULL, average_response REAL NOT NULL
+    timeouts INTEGER NOT NULL, average_response REAL NOT NULL,
+    strict_mode INTEGER NOT NULL DEFAULT 0, cooldown_seconds REAL NOT NULL DEFAULT 2,
+    score REAL NOT NULL DEFAULT 0, max_score REAL NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS stages (
     id INTEGER PRIMARY KEY AUTOINCREMENT, training_id INTEGER NOT NULL,
@@ -16,6 +18,8 @@ CREATE TABLE IF NOT EXISTS attempts (
     number INTEGER NOT NULL, expression TEXT NOT NULL, correct_answer TEXT NOT NULL,
     user_answer TEXT, is_correct INTEGER NOT NULL, elapsed REAL NOT NULL,
     timed_out INTEGER NOT NULL, operation TEXT NOT NULL,
+    operations TEXT NOT NULL DEFAULT '[]', overtime REAL NOT NULL DEFAULT 0,
+    score REAL NOT NULL DEFAULT 0,
     FOREIGN KEY(stage_id) REFERENCES stages(id)
 );
 """
