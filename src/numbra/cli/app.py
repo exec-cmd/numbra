@@ -8,13 +8,14 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 from ..config import ConfigError, ConfigManager, default_database_path, default_log_path
-from ..core.challenge import Challenge, ChallengeOptions, TrainingSession
+from ..core.challenge import Challenge, ChallengeOptions, TrainingSession, grade_for_score
 from ..core.models import Difficulty, Operation, StageKind
 from ..core.stats import Stats
-from .input import timed_prompt
+from .input import cooldown, timed_prompt
 from .logging import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ def _parse_operations(value: str | None) -> tuple[Operation, ...] | None:
     try:
         return tuple(Operation(item) for item in parts)
     except ValueError as exc:
-        raise ValueError(f"unsupported operation; use +,-,*,/ ({exc})") from exc
+        raise ValueError(f"unsupported operation; use +,-,*,/,^ ({exc})") from exc
 
 
 @app.callback()
@@ -65,12 +66,32 @@ def challenge(
     stages: Annotated[
         int | None, typer.Option("-n", "--stages", help="Number of stages.", min=1)
     ] = None,
+    strict: Annotated[
+        bool, typer.Option("--strict", help="Fail immediately when an example reaches its limit.")
+    ] = False,
+    cooldown_seconds: Annotated[
+        float,
+        typer.Option(
+            "--cooldown",
+            help="Seconds between examples (1-3).",
+            min=1.0,
+            max=3.0,
+        ),
+    ] = 2.0,
 ) -> None:
     try:
         selected_operations = _parse_operations(operations)
         settings = ConfigManager().load_or_create()
         session: TrainingSession = Challenge(settings).create_session(
-            ChallengeOptions(duration, difficulty, seed, selected_operations, stages)
+            ChallengeOptions(
+                duration,
+                difficulty,
+                seed,
+                selected_operations,
+                stages,
+                strict,
+                cooldown_seconds,
+            )
         )
     except (ConfigError, ValueError) as exc:
         logger.error("Unable to start challenge: %s", exc)
@@ -79,42 +100,69 @@ def challenge(
     kinds = ", ".join(
         f"{kind.value}: {sum(stage.kind is kind for stage in session.stages)}" for kind in StageKind
     )
-    console.print(f"[bold]Numbra challenge[/bold] · difficulty: {session.difficulty.value}")
+    styles = settings.styles
+    accent_style = styles.get("accent", "bold cyan")
+    success_style = styles.get("success", "green")
+    error_style = styles.get("error", "bold red")
+    timer_style = styles.get("timer", "yellow")
     console.print(
-        f"Target: {session.target_seconds / 60:g} min · stages: {len(session.stages)} · operations: {', '.join(session.operations)} · seed: {session.seed}"
+        Panel.fit(
+            f"[bold]Difficulty:[/bold] {session.difficulty.value}\n"
+            f"[bold]Stages:[/bold] {len(session.stages)} · [bold]Examples:[/bold] {session.total_examples}\n"
+            f"[bold]Mode:[/bold] {'strict' if session.strict else 'soft'} · "
+            f"[bold]Cooldown:[/bold] {session.cooldown_seconds:g}s\n"
+            f"[bold]Operations:[/bold] {', '.join(session.operations)} · [bold]Seed:[/bold] {session.seed}",
+            title="Numbra challenge",
+            border_style=accent_style,
+        )
     )
-    console.print(f"Stage distribution: {kinds}")
+    console.print(f"Planned active budget: up to {session.target_seconds / 60:g} min · {kinds}")
     started = time.monotonic()
+    example_number = 0
     try:
         for stage_index, stage in enumerate(session.stages):
             console.print(
-                f"\n[bold cyan]Stage {stage.number}/{len(session.stages)}[/bold cyan] · {stage.kind.value} · {len(stage.problems)} examples"
+                f"\n[{accent_style}]Stage {stage.number}/{len(session.stages)}[/] · "
+                f"{stage.kind.value} · {len(stage.problems)} examples"
             )
             for problem_index, problem in enumerate(stage.problems):
+                example_number += 1
                 limit = session.time_limit_for(stage_index, problem_index)
-                console.print(f"Limit for this example: {limit:g}s")
+                console.print(
+                    f"[bold]Example {example_number}/{session.total_examples}[/bold] · "
+                    f"limit {limit:g}s"
+                )
                 before = time.monotonic()
-                answer = asyncio.run(timed_prompt(f"{problem.expression} = ", limit))
+                answer = asyncio.run(
+                    timed_prompt(f"{problem.expression} = ", limit, strict=session.strict)
+                )
                 elapsed = time.monotonic() - before
                 attempt = session.submit(
                     stage_index, problem_index, answer, elapsed, answer is None
                 )
                 if attempt.timed_out:
-                    console.print(f"[yellow]Time![/yellow] {problem.answer}")
+                    console.print(f"[{timer_style}]Time![/] {problem.answer}")
                 elif attempt.is_correct:
-                    console.print("[green]Correct[/green]")
+                    console.print(f"[{success_style}]Correct[/] · score {attempt.score:.2f}")
                 else:
-                    console.print(f"[red]Incorrect[/red] (answer: {problem.answer})")
+                    console.print(f"[{error_style}]Incorrect[/] (answer: {problem.answer})")
+                if example_number < session.total_examples:
+                    console.print(f"[dim]Next example in {session.cooldown_seconds:g}s[/dim]")
+                    asyncio.run(cooldown(session.cooldown_seconds))
     except (KeyboardInterrupt, EOFError):
         session.cancel()
         logger.info("Challenge cancelled")
         console.print("\n[yellow]Challenge cancelled. Nothing was saved.[/yellow]")
         raise typer.Exit(code=130) from None
     completed = session.complete(time.monotonic() - started)
-    training_id = Stats(default_database_path()).save(completed)
+    stats = Stats(default_database_path())
+    previous = stats.comparable_history(completed, limit=2)
+    training_id = stats.save(completed)
     logger.info("Challenge %s saved with %s attempts", training_id, len(completed.attempts))
     console.print(
-        f"\n[bold]Result:[/bold] {completed.correct_answers}/{completed.total_examples} correct ({completed.accuracy:.1%}), {completed.timeouts} timeouts, average {completed.average_response_seconds:.2f}s"
+        f"\n[bold]Result:[/bold] {completed.correct_answers}/{completed.total_examples} correct "
+        f"({completed.accuracy:.1%}), score {completed.score:.2f}/{completed.max_score:.0f} "
+        f"({completed.score_percent:.1%}), grade {completed.grade}, level {completed.grade}"
     )
     console.print(
         f"Target duration: {completed.duration_target_seconds:.1f}s · actual: {completed.actual_duration_seconds:.1f}s"
@@ -130,9 +178,12 @@ def challenge(
             )
     operation_totals: dict[Operation, list[int]] = {}
     for attempt in completed.attempts:
-        totals = operation_totals.setdefault(attempt.operation, [0, 0])
-        totals[0] += 1
-        totals[1] += int(attempt.is_correct)
+        stage = completed.stages[attempt.stage_number - 1]
+        problem = stage.problems[attempt.problem_number - 1]
+        for operation in problem.operations:
+            totals = operation_totals.setdefault(operation, [0, 0])
+            totals[0] += 1
+            totals[1] += int(attempt.is_correct)
     if operation_totals:
         console.print(
             "Operations: "
@@ -143,6 +194,27 @@ def challenge(
                 )
             )
         )
+    if previous:
+        prior = previous[0]
+        console.print(
+            f"Previous comparable: score {prior.score_percent:.1%}, "
+            f"accuracy {prior.accuracy:.1%}, average {prior.average_response_seconds:.2f}s, "
+            f"timeouts {prior.timeouts}"
+        )
+        console.print(
+            f"Delta: score {(completed.score_percent - prior.score_percent):+.1%} · "
+            f"accuracy {(completed.accuracy - prior.accuracy):+.1%} · "
+            f"average {(completed.average_response_seconds - prior.average_response_seconds):+.2f}s · "
+            f"timeouts {completed.timeouts - prior.timeouts:+d}"
+        )
+    if len(previous) >= 2:
+        scores = [completed.score_percent, *(row.score_percent for row in previous[:2])]
+        if all(score >= 0.85 for score in scores):
+            console.print("Recommendation: try the next difficulty level.")
+        elif all(score < 0.40 for score in scores):
+            console.print("Recommendation: repeat or lower the difficulty level.")
+        else:
+            console.print("Recommendation: keep the current difficulty level.")
 
 
 @app.command()
@@ -177,6 +249,8 @@ def results(
         "Examples",
         "Correct",
         "Accuracy",
+        "Score",
+        "Grade",
         "Avg time",
         "Timeouts",
         "Duration",
@@ -190,6 +264,8 @@ def results(
             str(row.total_examples),
             str(row.correct_answers),
             f"{row.accuracy:.1%}",
+            f"{row.score_percent:.1%}",
+            grade_for_score(row.score_percent),
             f"{row.average_response_seconds:.2f}s",
             str(row.timeouts),
             f"{row.actual_duration_seconds:.1f}s",

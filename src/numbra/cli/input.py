@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 
 
-async def timed_prompt(text: str, timeout: float) -> str | None:
+async def timed_prompt(text: str, timeout: float, strict: bool = True) -> str | None:
     """Read an answer while continuously showing the remaining time."""
     try:
         from prompt_toolkit import PromptSession
@@ -14,13 +15,25 @@ async def timed_prompt(text: str, timeout: float) -> str | None:
     started = loop.time()
 
     def toolbar() -> str:
-        remaining = max(0.0, timeout - (loop.time() - started))
-        return f"Time left: {remaining:04.1f}s"
+        elapsed = loop.time() - started
+        remaining = timeout - elapsed
+        if remaining >= 0:
+            return f"Time left: {remaining:04.1f}s"
+        return f"Overdue: {-remaining:04.1f}s"
 
     try:
-        return await asyncio.wait_for(
-            session.prompt_async(text, bottom_toolbar=toolbar, refresh_interval=0.1),
-            timeout=timeout,
-        )
+        prompt = session.prompt_async(text, bottom_toolbar=toolbar, refresh_interval=0.1)
+        if strict:
+            return await asyncio.wait_for(prompt, timeout=timeout)
+        return await prompt
     except TimeoutError:
         return None
+
+
+async def cooldown(
+    seconds: float,
+    sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> None:
+    if not 1.0 <= seconds <= 3.0:
+        raise ValueError("cooldown must be between 1 and 3 seconds")
+    await sleeper(seconds)
