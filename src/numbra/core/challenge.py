@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from ..config import OperationTimingConfig, Settings
-from .generator import DifficultyProfile, ProblemGenerator
+from .generator import DifficultyProfile, ProblemGenerator, complexity_score
 from .models import Difficulty, Operation, Problem, StageKind
 from .stages import allocate_stage_kinds
 
@@ -83,7 +83,14 @@ class CompletedTraining:
 
     @property
     def max_score(self) -> Decimal:
-        return Decimal(self.total_examples)
+        return sum(
+            (
+                Decimal(complexity_score(problem))
+                for stage in self.stages
+                for problem in stage.problems
+            ),
+            Decimal(0),
+        )
 
     @property
     def score(self) -> Decimal:
@@ -155,7 +162,11 @@ class TrainingSession:
         overtime = max(0.0, elapsed - limit)
         score = Decimal(0)
         if correct:
-            score = Decimal(0) if self.strict and timed_out else score_for_elapsed(elapsed, limit)
+            score = (
+                Decimal(0)
+                if self.strict and timed_out
+                else score_for_problem(problem, elapsed, limit)
+            )
         attempt = AnswerAttempt(
             stage_number + 1,
             problem_number + 1,
@@ -302,6 +313,11 @@ def score_for_elapsed(elapsed_seconds: float, limit_seconds: float) -> Decimal:
     elapsed = max(0.0, elapsed_seconds)
     factor = max(0.0, min(1.0, 2.0 - elapsed / limit_seconds))
     return Decimal(str(round(factor, 10)))
+
+
+def score_for_problem(problem: Problem, elapsed_seconds: float, limit_seconds: float) -> Decimal:
+    """Return the task's complexity-weighted score for a correct answer."""
+    return Decimal(complexity_score(problem)) * score_for_elapsed(elapsed_seconds, limit_seconds)
 
 
 def grade_for_score(score_percent: float) -> str:

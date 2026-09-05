@@ -4,9 +4,16 @@ from decimal import Decimal
 from pathlib import Path
 
 from numbra.config import ConfigManager, ConfigPaths
-from numbra.core.challenge import Challenge, ChallengeOptions, score_for_elapsed
+from numbra.config.models import OperationTimingConfig
+from numbra.core.challenge import (
+    Challenge,
+    ChallengeOptions,
+    StagePlan,
+    TrainingSession,
+    score_for_elapsed,
+)
 from numbra.core.generator import canonical_problem_key, complexity_score
-from numbra.core.models import Difficulty, Operation, Problem
+from numbra.core.models import Difficulty, Operation, Problem, StageKind
 from numbra.core.stats import Stats
 
 
@@ -40,7 +47,45 @@ def test_late_correct_answer_is_recorded_with_partial_score(tmp_path: Path) -> N
 
     assert attempt.is_correct is True
     assert attempt.overtime_seconds == 1.0
-    assert attempt.score == Decimal("0.8")
+    assert attempt.score == Decimal(complexity_score(session.stages[0].problems[0])) * Decimal(
+        "0.8"
+    )
+
+
+def test_score_depends_on_problem_complexity() -> None:
+    simple = Problem("1 + 1", 2, (Operation.ADD,))
+    complex_problem = Problem(
+        "20 / 5 + 3 * 4",
+        16,
+        (Operation.DIVIDE, Operation.ADD, Operation.MULTIPLY),
+    )
+    session = TrainingSession(
+        started_at=0.0,
+        difficulty=Difficulty.NORMAL,
+        seed=1,
+        operations=(Operation.ADD, Operation.DIVIDE, Operation.MULTIPLY),
+        target_seconds=60.0,
+        stages=(
+            StagePlan(
+                1,
+                StageKind.NORMAL,
+                10.0,
+                (simple, complex_problem),
+            ),
+        ),
+        operation_timing=OperationTimingConfig(enabled=False),
+    )
+
+    simple_attempt = session.submit(0, 0, "2", elapsed_seconds=5.0)
+    complex_attempt = session.submit(0, 1, "16", elapsed_seconds=5.0)
+    completed = session.complete(actual_duration=10.0)
+
+    assert complexity_score(complex_problem) > complexity_score(simple)
+    assert complex_attempt.score > simple_attempt.score
+    assert complex_attempt.score == Decimal(complexity_score(complex_problem))
+    assert completed.max_score == Decimal(
+        complexity_score(simple) + complexity_score(complex_problem)
+    )
 
 
 def test_difficulty_aggregate_uses_example_totals(tmp_path: Path) -> None:
@@ -139,8 +184,11 @@ def test_stats_persist_score_and_timer_mode(tmp_path: Path) -> None:
     record = stats.history(1)[0]
 
     assert record.strict is True
-    assert record.score == 1.0
-    assert record.max_score == session.total_examples
+    expected_max_score = sum(
+        complexity_score(item) for stage in session.stages for item in stage.problems
+    )
+    assert record.score == complexity_score(problem)
+    assert record.max_score == expected_max_score
 
 
 def test_planned_limits_stay_within_requested_duration(tmp_path: Path) -> None:
