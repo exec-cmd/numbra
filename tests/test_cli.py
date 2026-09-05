@@ -17,7 +17,7 @@ def test_help_and_version() -> None:
     assert help_result.exit_code == 0
     assert "challenge" in help_result.stdout
     assert version_result.exit_code == 0
-    assert "0.1.0" in version_result.stdout
+    assert "1.0.0" in version_result.stdout
 
 
 def test_invalid_operations_are_reported() -> None:

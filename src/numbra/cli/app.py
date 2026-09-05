@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from .._version import __version__
 from ..config import ConfigError, ConfigManager, default_database_path, default_log_path
 from ..core.challenge import Challenge, ChallengeOptions, TrainingSession, grade_for_score
 from ..core.models import Difficulty, Operation, StageKind
@@ -47,7 +48,7 @@ def callback(
 ) -> None:
     configure_logging(default_log_path(), verbose)
     if version:
-        console.print("numbra 0.1.0")
+        console.print(f"numbra {__version__}")
         raise typer.Exit()
 
 

@@ -71,7 +71,7 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy
 uv build
-uv tool install dist/numbra-0.1.0-py3-none-any.whl
+uv tool install dist/numbra-1.0.0-py3-none-any.whl
 numbra --version
 ```
 
