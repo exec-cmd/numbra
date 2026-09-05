@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import re
 import sys
 from types import SimpleNamespace
 
@@ -43,10 +44,11 @@ def test_results_reset_requires_confirmation(monkeypatch, tmp_path) -> None:
 def test_short_flags_are_documented() -> None:
     result = runner.invoke(app, ["challenge", "--help"])
     assert result.exit_code == 0
-    assert "-t" in result.stdout
-    assert "-n" in result.stdout
-    assert "--strict" in result.stdout
-    assert "--cooldown" in result.stdout
+    plain_help = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]|\s+", "", result.stdout)
+    assert "-t" in plain_help
+    assert "-n" in plain_help
+    assert "--strict" in plain_help
+    assert "--cooldown" in plain_help
 
 
 def test_timed_prompt_returns_none_after_timeout(monkeypatch) -> None:
