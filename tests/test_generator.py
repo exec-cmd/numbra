@@ -27,6 +27,15 @@ def test_generated_problem_is_correct_and_division_is_integral() -> None:
             assert problem.answer.denominator == 1
 
 
+def test_division_does_not_use_the_same_number_as_divisor() -> None:
+    profile = DifficultyProfile(min_value=1, max_value=50, min_terms=2, max_terms=2)
+    problems = ProblemGenerator(profile, (Operation.DIVIDE,), 7).generate_many(20)
+
+    assert all(
+        left != right for problem in problems for left, right in [problem.expression.split(" / ")]
+    )
+
+
 def test_stage_distribution_is_exact_and_scales() -> None:
     assert allocate_stage_kinds(3) == (StageKind.FAST, StageKind.NORMAL, StageKind.SLOW)
     assert allocate_stage_kinds(6) == (

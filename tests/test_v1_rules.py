@@ -17,6 +17,10 @@ from numbra.core.models import Difficulty, Operation, Problem, StageKind
 from numbra.core.stats import Stats
 
 
+def expected_problem_score(problem: Problem) -> Decimal:
+    return Decimal("1") + Decimal(max(0, complexity_score(problem) - 3)) * Decimal("0.2")
+
+
 def test_problem_uses_standard_operator_precedence() -> None:
     problem = Problem("20 + 15 * 8", 140, (Operation.ADD, Operation.MULTIPLY))
 
@@ -47,9 +51,8 @@ def test_late_correct_answer_is_recorded_with_partial_score(tmp_path: Path) -> N
 
     assert attempt.is_correct is True
     assert attempt.overtime_seconds == 1.0
-    assert attempt.score == Decimal(complexity_score(session.stages[0].problems[0])) * Decimal(
-        "0.8"
-    )
+    problem = session.stages[0].problems[0]
+    assert attempt.score == expected_problem_score(problem) * Decimal("0.8")
 
 
 def test_score_depends_on_problem_complexity() -> None:
@@ -82,9 +85,10 @@ def test_score_depends_on_problem_complexity() -> None:
 
     assert complexity_score(complex_problem) > complexity_score(simple)
     assert complex_attempt.score > simple_attempt.score
-    assert complex_attempt.score == Decimal(complexity_score(complex_problem))
+    assert simple_attempt.score == Decimal("1.0")
+    assert complex_attempt.score == expected_problem_score(complex_problem)
     assert completed.max_score == Decimal(
-        complexity_score(simple) + complexity_score(complex_problem)
+        expected_problem_score(simple) + expected_problem_score(complex_problem)
     )
 
 
@@ -185,10 +189,10 @@ def test_stats_persist_score_and_timer_mode(tmp_path: Path) -> None:
 
     assert record.strict is True
     expected_max_score = sum(
-        complexity_score(item) for stage in session.stages for item in stage.problems
+        expected_problem_score(item) for stage in session.stages for item in stage.problems
     )
-    assert record.score == complexity_score(problem)
-    assert record.max_score == expected_max_score
+    assert record.score == float(expected_problem_score(problem))
+    assert record.max_score == float(expected_max_score)
 
 
 def test_planned_limits_stay_within_requested_duration(tmp_path: Path) -> None:

@@ -84,11 +84,7 @@ class CompletedTraining:
     @property
     def max_score(self) -> Decimal:
         return sum(
-            (
-                Decimal(complexity_score(problem))
-                for stage in self.stages
-                for problem in stage.problems
-            ),
+            (max_score_for_problem(problem) for stage in self.stages for problem in stage.problems),
             Decimal(0),
         )
 
@@ -315,9 +311,14 @@ def score_for_elapsed(elapsed_seconds: float, limit_seconds: float) -> Decimal:
     return Decimal(str(round(factor, 10)))
 
 
+def max_score_for_problem(problem: Problem) -> Decimal:
+    """Return the calibrated maximum score for a problem."""
+    return Decimal(1) + Decimal(max(0, complexity_score(problem) - 3)) * Decimal("0.2")
+
+
 def score_for_problem(problem: Problem, elapsed_seconds: float, limit_seconds: float) -> Decimal:
     """Return the task's complexity-weighted score for a correct answer."""
-    return Decimal(complexity_score(problem)) * score_for_elapsed(elapsed_seconds, limit_seconds)
+    return max_score_for_problem(problem) * score_for_elapsed(elapsed_seconds, limit_seconds)
 
 
 def grade_for_score(score_percent: float) -> str:

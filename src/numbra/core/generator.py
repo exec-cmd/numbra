@@ -195,6 +195,7 @@ class ProblemGenerator:
                 divisor
                 for divisor in range(2, self.profile.max_value + 1)
                 if left.value != 0
+                and divisor != left.value
                 and left.value % divisor == 0
                 and abs(left.value // divisor) <= self.profile.max_result
             ]
