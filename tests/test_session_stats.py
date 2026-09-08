@@ -2,6 +2,7 @@ from pathlib import Path
 
 from numbra.config import ConfigManager, ConfigPaths
 from numbra.core.challenge import Challenge, ChallengeOptions
+from numbra.core.generator import complexity_score
 from numbra.core.models import Difficulty, Operation, StageKind
 from numbra.core.stages import allocate_stage_kinds
 from numbra.core.stats import Stats
@@ -57,5 +58,35 @@ def test_stats_reset_removes_history_but_keeps_schema(tmp_path: Path) -> None:
 
 
 def test_all_difficulty_distributions_have_exact_stage_count() -> None:
-    assert allocate_stage_kinds(3) == (StageKind.FAST, StageKind.NORMAL, StageKind.SLOW)
+    assert allocate_stage_kinds(3) == (StageKind.SLOW, StageKind.NORMAL, StageKind.FAST)
     assert len(allocate_stage_kinds(7)) == 7
+
+
+def test_seeded_session_progresses_problem_complexity_between_stages(tmp_path: Path) -> None:
+    settings = ConfigManager(ConfigPaths.from_root(tmp_path / "config")).load_or_create()
+    session = Challenge(settings).create_session(
+        ChallengeOptions(
+            difficulty=Difficulty.HARD,
+            seed=42,
+            stages=3,
+            duration_minutes=3,
+            operations=(Operation.ADD, Operation.SUBTRACT, Operation.MULTIPLY, Operation.DIVIDE),
+        )
+    )
+
+    stage_complexities = [
+        sum(complexity_score(problem) for problem in stage.problems) / len(stage.problems)
+        for stage in session.stages
+    ]
+
+    assert stage_complexities == sorted(stage_complexities)
+
+
+def test_seed_reproduces_staged_problem_progression(tmp_path: Path) -> None:
+    settings = ConfigManager(ConfigPaths.from_root(tmp_path / "config")).load_or_create()
+    options = ChallengeOptions(difficulty=Difficulty.HARD, seed=42, stages=3, duration_minutes=3)
+
+    first = Challenge(settings).create_session(options)
+    second = Challenge(settings).create_session(options)
+
+    assert first.stages == second.stages

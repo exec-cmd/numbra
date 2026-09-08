@@ -47,12 +47,13 @@ def test_late_correct_answer_is_recorded_with_partial_score(tmp_path: Path) -> N
     )
 
     answer = str(session.stages[0].problems[0].answer)
-    attempt = session.submit(0, 0, answer, elapsed_seconds=6.0)
+    limit = session.time_limit_for(0, 0)
+    attempt = session.submit(0, 0, answer, elapsed_seconds=limit + 1.0)
 
     assert attempt.is_correct is True
     assert attempt.overtime_seconds == 1.0
     problem = session.stages[0].problems[0]
-    assert attempt.score == expected_problem_score(problem) * Decimal("0.8")
+    assert attempt.score == expected_problem_score(problem) * score_for_elapsed(limit + 1.0, limit)
 
 
 def test_score_depends_on_problem_complexity() -> None:

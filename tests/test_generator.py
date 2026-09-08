@@ -37,14 +37,14 @@ def test_division_does_not_use_the_same_number_as_divisor() -> None:
 
 
 def test_stage_distribution_is_exact_and_scales() -> None:
-    assert allocate_stage_kinds(3) == (StageKind.FAST, StageKind.NORMAL, StageKind.SLOW)
+    assert allocate_stage_kinds(3) == (StageKind.SLOW, StageKind.NORMAL, StageKind.FAST)
     assert allocate_stage_kinds(6) == (
-        StageKind.FAST,
-        StageKind.NORMAL,
         StageKind.SLOW,
-        StageKind.FAST,
         StageKind.NORMAL,
+        StageKind.FAST,
         StageKind.SLOW,
+        StageKind.NORMAL,
+        StageKind.FAST,
     )
 
 

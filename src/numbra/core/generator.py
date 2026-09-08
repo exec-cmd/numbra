@@ -103,6 +103,23 @@ class ProblemGenerator:
                 return tuple(problems)
         raise GenerationError("difficulty profile cannot produce the requested batch")
 
+    def generate_progressive_batches(
+        self, counts: tuple[int, ...]
+    ) -> tuple[tuple[Problem, ...], ...]:
+        """Split one balanced batch into deterministic low-to-high complexity stages."""
+        if any(count < 0 for count in counts):
+            raise ValueError("counts must not contain negative values")
+        problems = sorted(
+            self.generate_many(sum(counts)),
+            key=lambda problem: (complexity_score(problem), problem.expression),
+        )
+        cursor = 0
+        batches = []
+        for count in counts:
+            batches.append(tuple(problems[cursor : cursor + count]))
+            cursor += count
+        return tuple(batches)
+
     def _build_unique(
         self,
         terms: int,

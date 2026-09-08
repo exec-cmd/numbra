@@ -263,13 +263,10 @@ class Challenge:
         counts = [
             max(1, int(budget // (config.stage_limits[kind] + max_problem_bonus))) for kind in kinds
         ]
-        generated = generator.generate_many(sum(counts))
-        cursor = 0
+        generated_batches = generator.generate_progressive_batches(tuple(counts))
         plans = []
-        for number, (kind, count) in enumerate(zip(kinds, counts, strict=True), 1):
+        for number, (kind, problems) in enumerate(zip(kinds, generated_batches, strict=True), 1):
             limit = config.stage_limits[kind]
-            problems = generated[cursor : cursor + count]
-            cursor += count
             plans.append(StagePlan(number, kind, limit, tuple(problems)))
         return TrainingSession(
             started_at=self.wall_clock(),

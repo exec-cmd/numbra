@@ -52,9 +52,9 @@ numbra challenge --duration 6 --difficulty normal --seed 42 --operations +,-,*,/
 
 `numbra results --limit 10` shows recent completed sessions and aggregate totals. Use `numbra results --reset` to clear history after confirmation, or `numbra results --reset --yes` in scripts. `numbra --help`, `numbra --version`, and each command's `--help` document the installed interface.
 
-Stages are `fast`, `normal`, or `slow`. Their default per-answer limits are 5, 10, and 15 seconds. A correct answer receives calibrated points based on the problem's complexity: the minimum is 1 point, with 0.2 added for each complexity point above the minimum. In soft mode, the awarded points then decrease linearly to zero at twice the limit. Input remains available after that point. `--strict` turns the limit into an immediate failed attempt. `--cooldown` gives a short transition pause before the next example.
+Stages progress from `slow` to `normal` to `fast`; their default per-answer limits are 15, 10, and 5 seconds. A correct answer receives calibrated points based on the problem's complexity: the minimum is 1 point, with 0.2 added for each complexity point above the minimum. In soft mode, the awarded points then decrease linearly to zero at twice the limit. Input remains available after that point. `--strict` turns the limit into an immediate failed attempt. `--cooldown` gives a short transition pause before the next example.
 
-Difficulty is defined by a generator profile: very-easy and easy use two numbers, normal mixes two and three, hard uses three and four, and very-hard uses four more often. The profile also bounds operand size and the absolute size of intermediate results. Examples are unique within one training, and selected operations are distributed evenly. `fast`, `normal`, and `slow` stages change only the time limit. Parentheses use standard arithmetic precedence. Small powers (`^2` and `^3`) are available on hard and very-hard only when `^` is explicitly selected. Division is always exact, and division of a number by itself is excluded. Negative intermediate values and answers are allowed. Profile limits, including `max_result`, can be changed in `numbra.toml`.
+Difficulty is defined by a generator profile: very-easy and easy use two numbers, normal mixes two and three, hard uses three and four, and very-hard uses four more often. The profile also bounds operand size and the absolute size of intermediate results. Examples are unique within one training, and selected operations are distributed evenly. Within a session, the generator orders stages from lower to higher structural complexity, considering the number and type of operations plus expression nesting; it does not merely increase operand values. Parentheses use standard arithmetic precedence. Small powers (`^2` and `^3`) are available on hard and very-hard only when `^` is explicitly selected. Division is always exact, and division of a number by itself is excluded. Negative intermediate values and answers are allowed. Profile limits, including `max_result`, can be changed in `numbra.toml`.
 
 ## Configuration and data
 
@@ -71,7 +71,7 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy
 uv build
-uv tool install dist/numbra-1.0.0-py3-none-any.whl
+uv tool install dist/numbra-1.0.1-py3-none-any.whl
 numbra --version
 ```
 

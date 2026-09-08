@@ -1,6 +1,6 @@
 [project]
 name = "numbra"
-version = "1.0.0"
+version = "1.0.1"
 description = "CLI program for level up in mental arithmetic"
 readme = "README.md"
 license = { file = "LICENSE" }
