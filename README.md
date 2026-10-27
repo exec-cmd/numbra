@@ -21,6 +21,8 @@ Or download `numbra-<version>-py3-none-any.whl` from the release assets and run 
 numbra challenge                 # six minutes, three stages, normal difficulty
 numbra challenge -d hard --strict
 numbra challenge -o "*,/" -t 3   # only multiplication and division, three minutes
+numbra challenge -o tricks       # mental-math tricks such as 43 * 11 or 97 * 94
+numbra tricks                    # every trick with its rule and an example
 numbra results                   # history, personal records, streak
 ```
 

@@ -10,7 +10,7 @@ Read the relevant implementation and tests before changing behavior. Prefer the 
 
 - `src/numbra/cli/` owns Typer commands, Rich output, Prompt Toolkit input, and logging setup.
 - `src/numbra/config/` owns platform paths, default files, parsing, validation, and public config exports.
-- `src/numbra/core/` owns arithmetic models, generation, stage allocation, sessions, scoring, and statistics. Keep this package independent of Typer and Rich.
+- `src/numbra/core/` owns arithmetic models, generation (`catalog.py`, `tricks.py`, `generator.py`), stage allocation, sessions, scoring, and statistics. Keep this package independent of Typer and Rich.
 - `src/numbra/core/db/schema.py` defines the SQLite schema. `Stats._migrate()` handles existing databases.
 - `tests/` contains CLI, configuration, generator, generation-quality, progress, session/statistics, and product-rule coverage; `docs/develop/human/development.md` maps each test file.
 - `README.md` and `README_RU.md` are short landing pages in English and Russian. User-visible detail lives in `docs/eng/` and `docs/rus/` (`usage.md`, `training.md`, `configuration.md`), kept in sync; contributor docs live in `docs/develop/human/` (English).
@@ -53,6 +53,7 @@ Treat these as contracts unless the task explicitly changes them:
 - Soft mode keeps input open after the limit. A correct answer receives a linear time factor that reaches zero at twice the limit. Strict mode ends the attempt at the limit.
 - Maximum problem score is complexity-calibrated: `1 + 0.2 * max(0, complexity_score - 3)`. Grades use the existing S/A/B/C/D thresholds.
 - Cooldown defaults to two seconds and accepts values from one through three seconds.
+- The `tricks` topic is off by default, selected only through `-o tricks` or `[features] tricks`, and never toggled by `--advanced`/`--no-advanced`. Each trick problem is a single trick with explicit work units from `core/tricks.py`; tricks use `TRICK_MAX_RESULT` (easy 400, normal 2,500, hard 10,000) instead of the profile `max_result`, rotate by strategy, and stay outside operation balance.
 - Cancelling a challenge does not save a partial session. Only completed training is persisted.
 - Progress groups (records, recommendation) match difficulty, strict mode, operations, and topics, and ignore duration, stage count, and generator/scoring versions. `Previous comparable` stays an exact match. A day streak counts local dates with a completed training and survives until the end of the next day. The recommendation never suggests a level above `hard`.
 

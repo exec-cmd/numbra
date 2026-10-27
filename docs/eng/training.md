@@ -16,6 +16,10 @@ Arithmetic follows standard precedence and is exact; division never divides a va
 
 Advanced topics are bounded: square roots cover perfect squares with roots 2–20; powers use bases 2–20 and exponents 2 or 3; logarithms use bases 2, 3, 5, or 10 with integer results −3 through 4; trigonometry uses exact rational values from its degree tables; identities use bounded sum and product patterns. Intermediate fractions have denominators of at most 12.
 
+## Tricks
+
+The `tricks` topic has fourteen tricks; `numbra tricks` lists them. Each problem is a single trick with no extra steps, and its work units are set by the trick and the size of its numbers instead of by the general heuristic, because a trick makes large-looking numbers cheap. Tricks use their own result limits: 400 on `easy`, 2,500 on `normal`, and 10,000 on `hard`. Not every trick exists on every level, and on `hard` trick problems are worth 4–5 units. A session rotates through the available tricks, and tricks do not count toward operation balance.
+
 ## Stages and time limits
 
 Stage kinds repeat `slow`, `normal`, `fast` with default limits of 15, 10, and 5 seconds per answer. Stages change the pace, not the difficulty: each stage gets a comparable share of the time budget and problems from the same band. Operation bonuses add time per operation in a problem: 0 s for `+` and `-`, 1 s for `*`, 2 s for `/`, 3 s for `^`.

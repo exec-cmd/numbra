@@ -21,6 +21,8 @@ numbra --version
 numbra challenge                 # шесть минут, три этапа, сложность normal
 numbra challenge -d hard --strict
 numbra challenge -o "*,/" -t 3   # только умножение и деление, три минуты
+numbra challenge -o tricks       # приёмы устного счёта вроде 43 * 11 или 97 * 94
+numbra tricks                    # все приёмы с правилом и примером
 numbra results                   # история, личные рекорды, серия дней
 ```
 

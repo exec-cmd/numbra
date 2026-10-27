@@ -35,6 +35,7 @@ For documentation-only changes, run `git diff --check` and review the rendered M
 - `tests/test_operation_selection.py` covers operation and topic selection through configuration and CLI options.
 - `tests/test_scoring.py` covers score boundaries, complexity-based scores, and strict timeouts.
 - `tests/test_stats.py` and `tests/test_stats_migrations.py` cover persistence, aggregates, reset, schema migrations, comparable-history filters, and legacy `very-hard` rows.
+- `tests/test_tricks.py` covers the trick registry, catalog units and limits, example correctness, topic selection, rotation, and balance.
 - `tests/test_progress.py` covers progress groups, correct-answer averages, personal records, and day streaks.
 - `tests/test_imports.py` checks that `numbra.core` loads without Typer or Rich and that public app imports resolve to one Typer app.
 

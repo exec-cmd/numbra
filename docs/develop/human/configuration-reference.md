@@ -28,7 +28,7 @@ The SQLite database (`numbra.sqlite3`) and log (`numbra.log`) use the platform d
 
 The default `numbra.toml` contains `[challenge]` values for `duration_minutes` (6), `difficulty` (`normal`), `stages` (3), and `operations` (`["+", "-", "*", "/"]`). An optional integer `seed` may be set; omit it to generate a new session seed. Supported difficulty values are `easy`, `normal`, and `hard`.
 
-`[features]` accepts five boolean values, all `false` by default:
+`[features]` accepts six boolean values, all `false` by default (files without `tricks` stay valid):
 
 ```toml
 [features]
@@ -37,9 +37,10 @@ trig = false
 log = false
 power = false
 identities = false
+tricks = false
 ```
 
-There is no `advanced` configuration key. The shared operation selection accepts `+,-,*,/,sqrt,trig,log,power` (`^` aliases `power`). Explicit CLI `-o` replaces configured operations and topics, preserving the independent identities setting. `--advanced` adds all basic operations, topics and identities; `--identities/--no-identities` overrides identities. `--no-advanced` disables configured topics while retaining topics explicitly listed in `-o`. Existing `[features]` tables remain readable and files are not rewritten.
+There is no `advanced` configuration key. The shared operation selection accepts `+,-,*,/,sqrt,trig,log,power,tricks` (`^` aliases `power`). `--advanced` and `--no-advanced` set every topic except `tricks`, which keeps its configured or `-o` value. Explicit CLI `-o` replaces configured operations and topics, preserving the independent identities setting. `--advanced` adds all basic operations, topics and identities; `--identities/--no-identities` overrides identities. `--no-advanced` disables configured topics while retaining topics explicitly listed in `-o`. Existing `[features]` tables remain readable and files are not rewritten.
 
 `[stages.fast]`, `[stages.normal]`, and `[stages.slow]` each accept a positive `limit_seconds`, defaulting to 5, 10, and 15 seconds. `[timing]` accepts `operation_bonus_enabled` and an `[timing.operation_bonus_seconds]` table. Bonuses must be finite and non-negative. Defaults are 0 seconds for `+` and `-`, 1 for `*`, 2 for `/`, and 3 for `^`.
 
