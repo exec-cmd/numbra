@@ -134,3 +134,9 @@ def test_tricks_seed_reproduces() -> None:
     first = _session(operations=(Topic.TRICKS,), seed=9)
     second = _session(operations=(Topic.TRICKS,), seed=9)
     assert first.stages == second.stages
+
+
+@pytest.mark.parametrize("trick", TRICKS, ids=IDS)
+def test_trick_examples_are_correct(trick) -> None:
+    parts = [part.strip() for part in trick.example.split("=")]
+    assert parse_expression(parts[0]).evaluate() == int(parts[-1])

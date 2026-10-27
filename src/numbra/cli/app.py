@@ -14,8 +14,10 @@ from rich.table import Table
 from .._version import __version__
 from ..config import ConfigError, ConfigManager, default_database_path, default_log_path
 from ..core.challenge import Challenge, ChallengeOptions, TrainingSession, grade_for_score
+from ..core.generator import trick_levels
 from ..core.models import Difficulty, Operation, StageKind, Topic, parse_operation_selection
 from ..core.stats import Stats
+from ..core.tricks import TRICKS
 from .input import cooldown, timed_prompt
 from .logging import configure_logging
 
@@ -275,6 +277,23 @@ def challenge(
             console.print("Recommendation: keep the current difficulty level.")
 
 
+@app.command(help="List the mental-math tricks used by -o tricks.")
+def tricks() -> None:
+    levels = trick_levels()
+    table = Table(title="Mental-math tricks")
+    table.add_column("Trick", no_wrap=True)
+    for heading in ("Rule", "Example", "Levels"):
+        table.add_column(heading)
+    for trick in TRICKS:
+        table.add_row(
+            trick.id,
+            trick.rule,
+            trick.example,
+            ", ".join(level.value for level in levels.get(trick.id, ())),
+        )
+    console.print(table)
+
+
 def _days(count: int) -> str:
     return f"{count} day" if count == 1 else f"{count} days"
 
@@ -385,3 +404,18 @@ def results(
             else f"{record.best_average_correct_seconds:.2f}s",
         )
     console.print(records)
+    trick_rows = stats.trick_stats()
+    if trick_rows:
+        trick_table = Table(title="Tricks")
+        for heading in ("Trick", "Attempts", "Accuracy", "Avg correct"):
+            trick_table.add_column(heading)
+        for item in trick_rows:
+            trick_table.add_row(
+                item.strategy,
+                str(item.attempts),
+                f"{item.correct / item.attempts:.1%}",
+                "—"
+                if item.average_correct_seconds is None
+                else f"{item.average_correct_seconds:.2f}s",
+            )
+        console.print(trick_table)

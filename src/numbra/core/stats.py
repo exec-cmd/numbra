@@ -52,6 +52,14 @@ class PersonalRecord:
     best_average_correct_seconds: float | None
 
 
+@dataclass(frozen=True, slots=True)
+class StrategyStats:
+    strategy: str
+    attempts: int
+    correct: int
+    average_correct_seconds: float | None
+
+
 # Completed trainings with the mean time of their correct answers (NULL when none).
 # One grouped pass over attempts; a correlated subquery rescans them per training.
 _COMPLETED = (
@@ -375,6 +383,22 @@ class Stats:
                 )
             )
         return sorted(result, key=lambda record: -record.sessions)
+
+    def trick_stats(self) -> list[StrategyStats]:
+        """Attempts on trick problems from completed trainings, per trick."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT a.strategy, COUNT(*) AS attempts, SUM(a.is_correct) AS correct, "
+                "AVG(CASE WHEN a.is_correct = 1 THEN a.elapsed END) AS average_correct "
+                "FROM attempts a JOIN stages s ON s.id = a.stage_id "
+                "JOIN trainings t ON t.id = s.training_id "
+                "WHERE t.status = 'completed' AND a.topics LIKE '%\"tricks\"%' "
+                "GROUP BY a.strategy ORDER BY attempts DESC, a.strategy"
+            ).fetchall()
+        return [
+            StrategyStats(row["strategy"], row["attempts"], row["correct"], row["average_correct"])
+            for row in rows
+        ]
 
     def streak(self, today: date) -> tuple[int, int]:
         """Current and best runs of consecutive local days with a completed training."""

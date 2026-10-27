@@ -230,3 +230,25 @@ def test_results_prints_streak_and_records(monkeypatch) -> None:
     output = re.sub(r"\s+", " ", result.stdout)
     assert "Streak: 1 day (best 1)" in output
     assert "Personal records" in output
+
+
+def test_tricks_command_lists_every_trick() -> None:
+    from numbra.core.tricks import TRICKS
+
+    result = runner.invoke(app, ["tricks"])
+    assert result.exit_code == 0
+    output = re.sub(r"\s+", " ", result.stdout)
+    assert "Mental-math tricks" in output
+    for trick in TRICKS:
+        assert trick.id in output
+    assert "easy, normal" in output
+
+
+def test_results_shows_tricks_table_only_with_data(monkeypatch) -> None:
+    _run_correct_challenge(monkeypatch)
+    assert "Tricks" not in runner.invoke(app, ["results"]).stdout
+    _run_correct_challenge(monkeypatch, "-o", "tricks")
+    result = runner.invoke(app, ["results"])
+    assert result.exit_code == 0
+    assert "Tricks" in result.stdout
+    assert "Avg correct" in result.stdout

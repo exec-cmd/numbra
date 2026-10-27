@@ -241,6 +241,17 @@ class ProblemGenerator:
         return tuple(result)
 
 
+def trick_levels() -> dict[str, tuple[Difficulty, ...]]:
+    """Difficulty levels on which each trick has at least one problem."""
+    levels: dict[str, list[Difficulty]] = {}
+    for difficulty, limit in TRICK_MAX_RESULT.items():
+        low, high = WORK_BANDS[difficulty]
+        found = {p.strategy for p in trick_catalog(limit) if low <= complexity_score(p) - 2 <= high}
+        for strategy in found:
+            levels.setdefault(strategy, []).append(difficulty)
+    return {strategy: tuple(found) for strategy, found in levels.items()}
+
+
 def _nodes(expr: Expr) -> tuple[Expr, ...]:
     return (expr, *(node for arg in expr.args for node in _nodes(arg)))
 

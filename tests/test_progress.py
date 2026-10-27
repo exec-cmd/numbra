@@ -175,3 +175,23 @@ def test_record_queries_scale_linearly_with_history(tmp_path: Path) -> None:
         large.save(_training(answers, started_at=float(i)))
 
     assert _query_steps(large) < 3 * _query_steps(small)
+
+
+def test_trick_stats_groups_by_strategy(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    stats = Stats(tmp_path / "tricks.sqlite3")
+    base = _training(((True, 2.0), (False, 3.0), (True, 4.0)))
+    stage = base.stages[0]
+    problems = (
+        replace(stage.problems[0], strategy="times-11", topics=(Topic.TRICKS,)),
+        replace(stage.problems[1], strategy="times-11", topics=(Topic.TRICKS,)),
+        replace(stage.problems[2], strategy="successive-steps"),
+    )
+    stats.save(replace(base, stages=(replace(stage, problems=problems),)))
+
+    [row] = stats.trick_stats()
+
+    assert (row.strategy, row.attempts, row.correct) == ("times-11", 2, 1)
+    assert row.average_correct_seconds == 2.0
+    assert Stats(tmp_path / "empty.sqlite3").trick_stats() == []
