@@ -172,3 +172,61 @@ def test_challenge_prints_score_and_grade(monkeypatch, selection) -> None:
     expected_operations = ", ".join(selection.split(","))
     assert f"Operations: {expected_operations}" in plain_output
     assert "Warning:" in plain_output and "using 'easy'" in plain_output
+
+
+def _run_correct_challenge(monkeypatch, *extra: str):
+    from numbra.core.expressions import parse_expression
+
+    cli_module = importlib.import_module("numbra.cli.app")
+
+    async def correct_prompt(text, *args, **kwargs):
+        return str(parse_expression(text.removesuffix(" = ")).evaluate())
+
+    async def no_cooldown(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(cli_module, "timed_prompt", correct_prompt)
+    monkeypatch.setattr(cli_module, "cooldown", no_cooldown)
+    args = ["challenge", "-t", "1", "-n", "1", "-o", "+", "--cooldown", "1", *extra]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.stdout
+    return re.sub(r"\s+", " ", result.stdout)
+
+
+def test_first_session_prints_new_best_without_comparison(monkeypatch) -> None:
+    output = _run_correct_challenge(monkeypatch)
+    assert "Avg correct answer:" in output
+    assert "New personal best:" in output
+    assert " · best " not in output
+    assert "Streak: 1 day (best 1)" in output
+
+
+def test_challenge_prints_progress_block(monkeypatch) -> None:
+    _run_correct_challenge(monkeypatch, "-S", "1")
+    output = _run_correct_challenge(monkeypatch, "-S", "2", "-t", "2")
+    assert re.search(r"Avg correct answer: \d+\.\d{2}s · best \d+\.\d{2}s · previous", output)
+    assert "Personal best:" in output or "New personal best:" in output
+    assert "Streak: 1 day (best 1)" in output
+
+
+def test_recommendation_uses_progress_group(monkeypatch) -> None:
+    for seed in ("1", "2"):
+        _run_correct_challenge(monkeypatch, "-S", seed, "-t", seed)
+    output = _run_correct_challenge(monkeypatch, "-S", "3", "-t", "3")
+    assert "Recommendation: try the next difficulty level." in output
+
+
+def test_recommendation_on_hard_never_suggests_next_level(monkeypatch) -> None:
+    for seed in ("1", "2"):
+        _run_correct_challenge(monkeypatch, "-d", "hard", "-S", seed)
+    output = _run_correct_challenge(monkeypatch, "-d", "hard", "-S", "3")
+    assert "Recommendation: keep the current difficulty level." in output
+
+
+def test_results_prints_streak_and_records(monkeypatch) -> None:
+    _run_correct_challenge(monkeypatch)
+    result = runner.invoke(app, ["results"])
+    assert result.exit_code == 0
+    output = re.sub(r"\s+", " ", result.stdout)
+    assert "Streak: 1 day (best 1)" in output
+    assert "Personal records" in output

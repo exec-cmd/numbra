@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 
 import typer
@@ -181,6 +181,7 @@ def challenge(
     completed = session.complete(time.monotonic() - started)
     stats = Stats(default_database_path())
     previous = stats.comparable_history(completed, limit=2)
+    progress = stats.progress_history(completed)
     training_id = stats.save(completed)
     logger.info("Challenge %s saved with %s attempts", training_id, len(completed.attempts))
     console.print(
@@ -244,14 +245,38 @@ def challenge(
             f"average {(completed.average_response_seconds - prior.average_response_seconds):+.2f}s · "
             f"timeouts {completed.timeouts - prior.timeouts:+d}"
         )
-    if len(previous) >= 2:
-        scores = [completed.score_percent, *(row.score_percent for row in previous[:2])]
-        if all(score >= 0.85 for score in scores):
+    average = completed.average_correct_seconds
+    if average is not None:
+        parts = [f"Avg correct answer: {average:.2f}s"]
+        times = [row.average_correct_seconds for row in progress]
+        known = [value for value in times if value is not None]
+        if known:
+            parts.append(f"best {min(known):.2f}s")
+        if times and times[0] is not None:
+            parts.append(f"previous {times[0]:.2f}s")
+        console.print(" · ".join(parts))
+    best = max((row.score_percent for row in progress), default=None)
+    if best is None or completed.score_percent > best:
+        console.print(f"[{success_style}]New personal best: {completed.score_percent:.1%}![/]")
+    else:
+        console.print(f"Personal best: {best:.1%} ({completed.score_percent - best:+.1%})")
+    current, longest = stats.streak(date.today())
+    console.print(f"Streak: {_days(current)} (best {longest})")
+    if len(progress) >= 2:
+        scores = [completed.score_percent, *(row.score_percent for row in progress[:2])]
+        if (
+            all(score >= 0.85 for score in scores)
+            and completed.difficulty is not list(Difficulty)[-1]
+        ):
             console.print("Recommendation: try the next difficulty level.")
         elif all(score < 0.40 for score in scores):
             console.print("Recommendation: repeat or lower the difficulty level.")
         else:
             console.print("Recommendation: keep the current difficulty level.")
+
+
+def _days(count: int) -> str:
+    return f"{count} day" if count == 1 else f"{count} days"
 
 
 @app.command()
@@ -336,3 +361,27 @@ def results(
                 for level, (total, correct) in sorted(aggregate.by_difficulty.items())
             )
         )
+    current, longest = stats.streak(date.today())
+    console.print(f"Streak: {_days(current)} (best {longest})")
+    records = Table(title="Personal records")
+    for heading in (
+        "Difficulty",
+        "Mode",
+        "Operations",
+        "Sessions",
+        "Best score",
+        "Best avg correct",
+    ):
+        records.add_column(heading)
+    for record in stats.records():
+        records.add_row(
+            record.difficulty,
+            "strict" if record.strict else "soft",
+            ", ".join((*record.operations, *record.topics)),
+            str(record.sessions),
+            f"{record.best_score_percent:.1%}",
+            "—"
+            if record.best_average_correct_seconds is None
+            else f"{record.best_average_correct_seconds:.2f}s",
+        )
+    console.print(records)
