@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from functools import lru_cache
 
 from .catalog import arithmetic_catalog, topic_catalog
-from .expressions import canonical_key, solution_steps, work_units
+from .expressions import Expr, canonical_key, solution_steps, work_units
 from .models import BASIC_OPERATIONS, Difficulty, Operation, Problem, Topic
 
 
@@ -23,6 +23,11 @@ class DifficultyProfile:
     max_result: int = 10_000
     term_weights: tuple[tuple[int, int], ...] = ()
 
+
+# Candidates inspected per signature group when looking for unused operands.
+CANDIDATE_WINDOW = 4
+# A large operand may appear this many times per session while alternatives exist.
+OPERAND_REPEAT_CAP = 3
 
 WORK_BANDS = {
     Difficulty.EASY: (1, 2),
@@ -73,11 +78,11 @@ class ProblemGenerator:
         self.warnings: list[str] = []
         self._topic_counts: Counter[str] = Counter()
         self._operation_counts: Counter[Operation] = Counter()
+        self._operand_counts: Counter[int] = Counter()
+        self._cycle: deque[int] = deque()
         self._groups: dict[str, list[tuple[tuple[Problem, ...], deque[Problem]]]] = defaultdict(
             list
         )
-        low, high = WORK_BANDS[difficulty] if difficulty is not None else (1, 10_000)
-        self._target_work = (low + high) / 2
         for family, groups in _catalog_groups(profile, self.operations, difficulty, self.topics):
             for candidates in groups:
                 shuffled = list(candidates)
@@ -85,6 +90,24 @@ class ProblemGenerator:
                 frozen = tuple(shuffled)
                 self._groups[family].append((frozen, deque(frozen)))
         self._families = tuple(self._groups)
+        self._levels = tuple(
+            sorted(
+                {
+                    complexity_score(p) - 2
+                    for groups in self._groups.values()
+                    for pool, _ in groups
+                    for p in pool
+                }
+            )
+        )
+
+    def _next_level(self) -> int:
+        """Spread work units evenly: each band level once per shuffled cycle."""
+        if not self._cycle:
+            levels = list(self._levels)
+            self._random.shuffle(levels)
+            self._cycle.extend(levels)
+        return self._cycle.popleft()
 
     def generate(self, complexity_range: tuple[int, int] | None = None) -> Problem:
         if complexity_range is not None:
@@ -105,17 +128,36 @@ class ProblemGenerator:
 
     def _take(self, family: str) -> Problem:
         groups = self._groups[family]
-        choices: list[tuple[float, int, Problem]] = []
+        target = self._next_level()
+        choices: list[tuple[tuple[int, ...], int, int, Problem]] = []
         for i, (_, queue) in enumerate(groups):
             while queue and canonical_problem_key(queue[0]) in self._seen:
                 queue.popleft()
-            if queue:
-                p = queue[0]
-                counts = self._operation_counts + Counter(p.operations)
-                selected = [counts[op] for op in self.operations]
+            window = 0
+            for j, p in enumerate(queue):
+                if window == CANDIDATE_WINDOW:
+                    break
+                if canonical_problem_key(p) in self._seen:
+                    continue
+                window += 1
+                selected = [
+                    self._operation_counts[op] + p.operations.count(op) for op in self.operations
+                ]
                 imbalance = max(selected, default=0) - min(selected, default=0)
-                score = imbalance * 100 + abs(complexity_score(p) - 2 - self._target_work)
-                choices.append((score, i, p))
+                numbers = _large_numbers(p)
+                reuse = sum(self._operand_counts[n] for n in numbers)
+                overused = any(
+                    self._operand_counts[n] + numbers.count(n) > OPERAND_REPEAT_CAP for n in numbers
+                )
+                # Slack of 2 lets multi-step levels (e.g. "a - b - c") in; later picks rebalance.
+                rank = (
+                    max(0, imbalance - 2),
+                    int(overused),
+                    abs(complexity_score(p) - 2 - target),
+                    reuse,
+                    imbalance,
+                )
+                choices.append((rank, i, j, p))
         if not choices:
             warning = (
                 f"Selected settings require repeated {family} exercises; unique catalog exhausted."
@@ -132,16 +174,17 @@ class ProblemGenerator:
                     cycle.append(cycle.pop(0))
                 queue.extend(cycle)
             return self._take(family)
-        different = [c for c in choices if canonical_problem_key(c[2]) != self._last]
+        different = [c for c in choices if canonical_problem_key(c[3]) != self._last]
         choices = different or choices
         best = min(c[0] for c in choices)
         tied = [c for c in choices if c[0] == best]
-        _, group_index, p = self._random.choice(tied)
-        self._groups[family][group_index][1].popleft()
+        _, group_index, position, p = self._random.choice(tied)
+        del self._groups[family][group_index][1][position]
         key = canonical_problem_key(p)
         self._seen.add(key)
         self._last = key
         self._operation_counts.update(p.operations)
+        self._operand_counts.update(_large_numbers(p))
         self._topic_counts.update({family: 1})
         return replace(p, solution_steps=solution_steps(p.as_tree()))
 
@@ -163,8 +206,9 @@ class ProblemGenerator:
         return tuple(problems)
 
     def start_stage(self, pending: Problem | None = None) -> None:
-        """Reset local operator balance, counting a carried unshown candidate."""
+        """Reset local operator balance and level cycle, counting a carried candidate."""
         self._operation_counts.clear()
+        self._cycle.clear()
         if pending is not None:
             self._operation_counts.update(pending.operations)
 
@@ -179,6 +223,24 @@ class ProblemGenerator:
             self.start_stage()
             result.append(self.generate_many(count))
         return tuple(result)
+
+
+def _nodes(expr: Expr) -> tuple[Expr, ...]:
+    return (expr, *(node for arg in expr.args for node in _nodes(arg)))
+
+
+def _large_numbers(problem: Problem) -> tuple[int, ...]:
+    """Operands above the multiplication table, whose repetition is noticeable."""
+    return _tree_large_numbers(problem.as_tree())
+
+
+@lru_cache(maxsize=65536)
+def _tree_large_numbers(expr: Expr) -> tuple[int, ...]:
+    return tuple(node.value for node in _nodes(expr) if node.kind == "number" and node.value > 12)
+
+
+def _small_quotient(problem: Problem) -> bool:
+    return any(node.kind == "/" and abs(node.evaluate()) < 3 for node in _nodes(problem.as_tree()))
 
 
 def _round_product(problem: Problem) -> bool:
@@ -240,6 +302,8 @@ def _catalog_groups(
             if not low <= units <= high:
                 continue
             if difficulty is not Difficulty.EASY and difficulty is not None and _round_product(p):
+                continue
+            if difficulty in (Difficulty.NORMAL, Difficulty.HARD) and _small_quotient(p):
                 continue
             key = canonical_problem_key(p)
             if key in seen:
