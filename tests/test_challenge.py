@@ -182,7 +182,6 @@ def test_difficulty_profiles_control_term_count_and_result_size(tmp_path: Path) 
         Difficulty.EASY: (2, 2),
         Difficulty.NORMAL: (2, 3),
         Difficulty.HARD: (3, 4),
-        Difficulty.VERY_HARD: (3, 4),
     }
 
     for difficulty, (minimum, maximum) in expected.items():

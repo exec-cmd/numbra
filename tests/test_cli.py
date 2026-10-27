@@ -33,6 +33,11 @@ def test_very_easy_is_not_a_cli_difficulty() -> None:
     assert result.exit_code == 2
 
 
+def test_cli_rejects_very_hard() -> None:
+    result = runner.invoke(app, ["challenge", "--difficulty", "very-hard"])
+    assert result.exit_code == 2
+
+
 def test_results_empty_database_is_clear() -> None:
     result = runner.invoke(app, ["results", "--limit", "10"])
     assert result.exit_code == 0

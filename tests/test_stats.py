@@ -104,6 +104,23 @@ def expected_problem_score(problem: Problem) -> Decimal:
     return Decimal("1") + Decimal(max(0, complexity_score(problem) - 3)) * Decimal("0.2")
 
 
+def test_results_reads_legacy_very_hard_rows(tmp_path: Path) -> None:
+    from typer.testing import CliRunner
+
+    from numbra.cli import app
+    from numbra.config import default_database_path
+
+    stats = Stats(default_database_path())
+    stats.save(_training())
+    with closing(sqlite3.connect(stats.database_path)) as connection, connection:
+        connection.execute("UPDATE trainings SET difficulty = 'very-hard'")
+
+    assert [row.difficulty for row in stats.history()] == ["very-hard"]
+    result = CliRunner().invoke(app, ["results"])
+    assert result.exit_code == 0
+    assert "very-hard" in result.stdout
+
+
 def _training(
     *,
     started_at: float = 100.0,

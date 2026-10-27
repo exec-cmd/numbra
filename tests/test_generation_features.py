@@ -63,9 +63,9 @@ def test_fraction_answers_are_exact() -> None:
     pytest.fail("enabled trig topic should provide a rational fraction in seed42 easy")
 
 
-def test_very_hard_division_has_constructive_multi_step_tasks() -> None:
+def test_hard_division_has_constructive_multi_step_tasks() -> None:
     session = Challenge(_settings()).create_session(
-        ChallengeOptions(seed=42, difficulty=Difficulty.VERY_HARD, operations=(Operation.DIVIDE,))
+        ChallengeOptions(seed=42, difficulty=Difficulty.HARD, operations=(Operation.DIVIDE,))
     )
     assert all(p.evaluate().denominator == 1 for s in session.stages for p in s.problems)
     assert all(len(p.operations) >= 2 for s in session.stages for p in s.problems)

@@ -40,12 +40,6 @@ max_terms = 3
 max_result = 500
 [difficulties.hard]
 min_value = 5
-max_value = 150
-min_terms = 3
-max_terms = 4
-max_result = 3000
-[difficulties.very-hard]
-min_value = 10
 max_value = 999
 min_terms = 3
 max_terms = 4

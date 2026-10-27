@@ -35,7 +35,7 @@ def test_topic_only_selection_contains_topic_in_every_problem(level, topic):
     assert result.topics == (expected,)
     assert problems and all(expected in p.topics for p in problems)
     assert all(p.family != "arithmetic" for p in problems)
-    assert result.generation_version == 3
+    assert result.generation_version == 4
     again = _session(topic, difficulty=level, identities=False)
     assert result.stages == again.stages
 
@@ -118,7 +118,7 @@ def test_topic_only_training_persists_selection_and_generator_version(tmp_path):
     record = stats.history(1)[0]
     assert record.operations == ()
     assert record.topics == ("trig",)
-    assert record.generation_version == 3
+    assert record.generation_version == 4
     assert stats.comparable_history(completed)
     assert not stats.comparable_history(replace(completed, generation_version=2))
 

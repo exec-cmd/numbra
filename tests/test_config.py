@@ -35,9 +35,9 @@ def test_new_difficulty_profiles_and_operation_timing_are_loaded(tmp_path: Path)
     settings = ConfigManager(paths).load_or_create()
     assert settings.challenge.difficulty.value == "normal"
     assert settings.challenge.profiles["easy"].max_value == 20
-    assert settings.challenge.profiles["very-hard"].max_value == 999
+    assert settings.challenge.profiles["hard"].max_value == 999
     assert settings.challenge.profiles["easy"].max_result == 400
-    assert settings.challenge.profiles["very-hard"].max_result == 10_000
+    assert settings.challenge.profiles["hard"].max_result == 10_000
     assert settings.challenge.operation_timing.enabled is True
     assert settings.challenge.operation_timing.bonus_seconds["*"] == 1.0
     assert settings.challenge.features == {topic: False for topic in settings.challenge.features}
@@ -73,6 +73,41 @@ def test_legacy_very_easy_profile_is_ignored_and_warned(tmp_path: Path) -> None:
     assert "very-easy" not in {level.value for level in settings.challenge.profiles}
     assert any("very-easy" in warning for warning in settings.warnings)
     assert paths.main.read_text(encoding="utf-8") == original
+
+
+def test_legacy_very_hard_difficulty_maps_to_hard(tmp_path: Path) -> None:
+    paths = ConfigPaths.from_root(tmp_path)
+    manager = ConfigManager(paths)
+    manager.load_or_create()
+    text = paths.main.read_text(encoding="utf-8")
+    paths.main.write_text(
+        text.replace('difficulty = "normal"', 'difficulty = "very-hard"'), encoding="utf-8"
+    )
+
+    settings = manager.load_or_create()
+
+    assert settings.challenge.difficulty.value == "hard"
+    assert any(
+        "numbra.toml" in warning and "'very-hard' is deprecated; using 'hard'" in warning
+        for warning in settings.warnings
+    )
+    assert 'difficulty = "very-hard"' in paths.main.read_text(encoding="utf-8")
+
+
+def test_legacy_very_hard_profile_is_ignored(tmp_path: Path) -> None:
+    paths = ConfigPaths.from_root(tmp_path)
+    manager = ConfigManager(paths)
+    manager.load_or_create()
+    with paths.main.open("a", encoding="utf-8") as file:
+        file.write("\n[difficulties.very-hard]\nmax_value = 5\n")
+
+    settings = manager.load_or_create()
+
+    assert "very-hard" not in {level.value for level in settings.challenge.profiles}
+    assert any(
+        "difficulties.very-hard is deprecated and ignored" in warning
+        for warning in settings.warnings
+    )
 
 
 def test_feature_flags_load_and_validate_with_filename_and_field(tmp_path: Path) -> None:

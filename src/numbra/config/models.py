@@ -37,8 +37,7 @@ def _default_profiles() -> dict[Difficulty, DifficultyConfig]:
     return {
         Difficulty.EASY: DifficultyConfig(1, 20, 2, 2, 400),
         Difficulty.NORMAL: DifficultyConfig(2, 50, 2, 3, 500),
-        Difficulty.HARD: DifficultyConfig(5, 150, 3, 4, 3_000),
-        Difficulty.VERY_HARD: DifficultyConfig(10, 999, 3, 4, 10_000),
+        Difficulty.HARD: DifficultyConfig(5, 999, 3, 4, 10_000),
     }
 
 

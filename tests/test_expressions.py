@@ -54,7 +54,7 @@ def test_expression_hash_survives_pickle_in_another_process() -> None:
 
 
 def test_model_adds_topics_and_expression_metadata_without_shifting_positional_fields() -> None:
-    assert [item.value for item in Difficulty] == ["easy", "normal", "hard", "very-hard"]
+    assert [item.value for item in Difficulty] == ["easy", "normal", "hard"]
     problem = Problem("2 + 3", 5, (Operation.ADD,))
     assert problem.family == "arithmetic"
     assert problem.topics == ()

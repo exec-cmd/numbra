@@ -27,8 +27,7 @@ class DifficultyProfile:
 WORK_BANDS = {
     Difficulty.EASY: (1, 2),
     Difficulty.NORMAL: (2, 5),
-    Difficulty.HARD: (4, 8),
-    Difficulty.VERY_HARD: (6, 12),
+    Difficulty.HARD: (4, 9),
 }
 
 
@@ -221,11 +220,7 @@ def _catalog_groups(
         elif Topic.POWER not in topics:
             topics += (Topic.POWER,)
     for topic in topics:
-        others = (
-            tuple(t for t in topics if t is not topic)
-            if difficulty in (Difficulty.HARD, Difficulty.VERY_HARD)
-            else ()
-        )
+        others = tuple(t for t in topics if t is not topic) if difficulty is Difficulty.HARD else ()
         pools[topic.value] = topic_catalog(
             topic,
             profile.min_value,

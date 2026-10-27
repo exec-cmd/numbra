@@ -84,7 +84,7 @@ class CompletedTraining:
     cooldown_seconds: float = 2.0
     cancelled: bool = False
     topics: tuple[Topic, ...] = ()
-    generation_version: int = 3
+    generation_version: int = 4
     scoring_version: int = 2
     settings_fingerprint: str = ""
 
@@ -151,7 +151,7 @@ class TrainingSession:
         self.topics = topics
         self.warnings = warnings
         self.settings_fingerprint = settings_fingerprint
-        self.generation_version = 3
+        self.generation_version = 4
         self.scoring_version = 2
         self.started_at = started_at
         self.difficulty = difficulty

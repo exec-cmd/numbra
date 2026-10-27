@@ -10,6 +10,9 @@ from .defaults import _DEFAULT_DESIGN, _DEFAULT_TEMPLATES, _DEFAULT_TOML
 from .models import ChallengeConfig, DifficultyConfig, OperationTimingConfig, Settings
 from .paths import ConfigPaths, default_config_paths
 
+# Removed levels stay readable in user files; existing files are never rewritten.
+_LEGACY_DIFFICULTIES = {"very-easy": Difficulty.EASY, "very-hard": Difficulty.HARD}
+
 
 class ConfigError(ValueError):
     """A user-facing configuration error."""
@@ -100,10 +103,11 @@ def _parse_settings(
         )
         stages = _integer(challenge.get("stages", defaults.stages), "challenge.stages")
         raw_difficulty = challenge.get("difficulty", defaults.difficulty)
-        if raw_difficulty == "very-easy":
-            difficulty = Difficulty.EASY
+        if raw_difficulty in _LEGACY_DIFFICULTIES:
+            difficulty = _LEGACY_DIFFICULTIES[raw_difficulty]
             warnings.append(
-                f"{paths.main.name}: challenge.difficulty 'very-easy' is deprecated; using 'easy'"
+                f"{paths.main.name}: challenge.difficulty '{raw_difficulty}' is deprecated; "
+                f"using '{difficulty.value}'"
             )
         else:
             difficulty = Difficulty(raw_difficulty)
@@ -130,8 +134,9 @@ def _parse_settings(
     limits = _parse_stage_limits(main.get("stages", {}), paths)
     raw_profiles = main.get("difficulties", {})
     profiles = _parse_profiles(raw_profiles, paths)
-    if isinstance(raw_profiles, dict) and "very-easy" in raw_profiles:
-        warnings.append(f"{paths.main.name}: difficulties.very-easy is deprecated and ignored")
+    if isinstance(raw_profiles, dict):
+        for legacy in sorted(_LEGACY_DIFFICULTIES.keys() & raw_profiles.keys()):
+            warnings.append(f"{paths.main.name}: difficulties.{legacy} is deprecated and ignored")
     features = _parse_features(main.get("features", {}), paths)
     timing = _parse_timing(main.get("timing", {}), paths)
     if not isinstance(templates, list) or not all(isinstance(item, str) for item in templates):
@@ -206,7 +211,7 @@ def _parse_stage_limits(value: Any, paths: ConfigPaths) -> dict[StageKind, float
 def _parse_profiles(value: Any, paths: ConfigPaths) -> dict[Difficulty, DifficultyConfig]:
     if not isinstance(value, dict):
         raise ConfigError(f"{paths.main.name}: difficulties must be a table")
-    unknown = set(value) - {level.value for level in Difficulty} - {"very-easy"}
+    unknown = set(value) - {level.value for level in Difficulty} - _LEGACY_DIFFICULTIES.keys()
     if unknown:
         raise ConfigError(f"{paths.main.name}: unknown field difficulties.{sorted(unknown)[0]}")
     defaults = ChallengeConfig().profiles

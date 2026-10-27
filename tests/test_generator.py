@@ -157,3 +157,17 @@ def test_small_pool_emits_one_cycle_warning() -> None:
     assert len(problems) == 40
     assert len(generator.warnings) == 1
     assert len(set(generator.warnings)) == 1
+
+
+def test_hard_band_is_4_to_9() -> None:
+    from numbra.config.models import ChallengeConfig
+    from numbra.core.generator import WORK_BANDS, DifficultyProfile, complexity_score
+    from numbra.core.models import BASIC_OPERATIONS
+
+    assert WORK_BANDS[Difficulty.HARD] == (4, 9)
+    config = ChallengeConfig().profiles[Difficulty.HARD]
+    profile = DifficultyProfile(
+        config.min_value, config.max_value, config.min_terms, config.max_terms, config.max_result
+    )
+    generator = ProblemGenerator(profile, BASIC_OPERATIONS, 7, difficulty=Difficulty.HARD)
+    assert all(4 <= complexity_score(p) - 2 <= 9 for p in generator.generate_many(60))
