@@ -12,8 +12,8 @@ Read the relevant implementation and tests before changing behavior. Prefer the 
 - `src/numbra/config/` owns platform paths, default files, parsing, validation, and public config exports.
 - `src/numbra/core/` owns arithmetic models, generation, stage allocation, sessions, scoring, and statistics. Keep this package independent of Typer and Rich.
 - `src/numbra/core/db/schema.py` defines the SQLite schema. `Stats._migrate()` handles existing databases.
-- `tests/` contains CLI, configuration, generator, session/statistics, and product-rule coverage.
-- `README.md` and `README_RU.md` document the same user-visible behavior in English and Russian.
+- `tests/` contains CLI, configuration, generator, generation-quality, progress, session/statistics, and product-rule coverage; `docs/develop/human/development.md` maps each test file.
+- `README.md` and `README_RU.md` are short landing pages in English and Russian. User-visible detail lives in `docs/eng/` and `docs/rus/` (`usage.md`, `training.md`, `configuration.md`), kept in sync; contributor docs live in `docs/develop/human/` (English).
 
 ## Development commands
 
@@ -44,17 +44,19 @@ Run checks in proportion to the change. Start with the closest tests while itera
 
 Treat these as contracts unless the task explicitly changes them:
 
-- A seed reproduces the generated exercise sequence. Exercises remain unique until their finite family catalog is exhausted; subsequent repeats produce a warning. Selected operations are balanced across a generated batch.
+- A seed reproduces the generated exercise sequence. Exercises remain unique until their finite family catalog is exhausted; subsequent repeats produce a warning. Selected operations are balanced across a generated batch (per-pick slack of 2).
+- Inside a stage, problems cycle through every work-unit level of the band in seeded shuffled order. A large operand (> 12) appears at most three times per session while alternatives exist. `normal` and `hard` exclude divisions with a quotient below 3.
 - Arithmetic uses exact rational evaluation and standard operator precedence. Basic arithmetic division is exact, non-zero, and never divides a value by itself. Advanced topics may produce fractions; generated intermediate denominators are at most 12. Negative intermediate values and answers are allowed.
 - Powers use `^`, are limited to exponents 2 and 3 by generation, and are enabled through `power` (`^` alias), feature configuration, or `--advanced` at any difficulty. Square roots, trigonometry, logarithms, powers, and identities default to off; identities have a separate CLI toggle.
-- Difficulty comes from transparent static profiles and work-unit bands: easy 1–2, normal 2–5, hard 4–8, very-hard 6–12. Do not introduce history-adaptive generation implicitly. Respect operand, term-count, and `max_result` limits.
+- Difficulty comes from transparent static profiles and work-unit bands: easy 1–2, normal 2–5, hard 4–9. Do not introduce history-adaptive generation implicitly. Respect operand, term-count, and `max_result` limits. Legacy config values `very-easy` and `very-hard` map to `easy` and `hard` with a warning; stored sessions keep their original difficulty string.
 - Stage kinds cycle through `slow`, `normal`, and `fast`. They change timing, not generator difficulty.
 - Soft mode keeps input open after the limit. A correct answer receives a linear time factor that reaches zero at twice the limit. Strict mode ends the attempt at the limit.
 - Maximum problem score is complexity-calibrated: `1 + 0.2 * max(0, complexity_score - 3)`. Grades use the existing S/A/B/C/D thresholds.
 - Cooldown defaults to two seconds and accepts values from one through three seconds.
 - Cancelling a challenge does not save a partial session. Only completed training is persisted.
+- Progress groups (records, recommendation) match difficulty, strict mode, operations, and topics, and ignore duration, stage count, and generator/scoring versions. `Previous comparable` stays an exact match. A day streak counts local dates with a completed training and survives until the end of the next day. The recommendation never suggests a level above `hard`.
 
-When changing one of these rules, update the implementation, focused tests, CLI help where applicable, and both READMEs in the same change.
+When changing one of these rules, update the implementation, focused tests, CLI help where applicable, and the matching pages in both `docs/eng/` and `docs/rus/` (plus the READMEs when the landing summary changes) in the same change.
 
 ## Configuration and persistence
 
@@ -76,6 +78,6 @@ Do not weaken assertions merely to make a failing test pass. Diagnose whether th
 
 ## Documentation and delivery
 
-Keep commands, accepted flags, defaults, paths, and behavior in both READMEs synchronized with the code. Use concise factual prose and avoid documenting planned behavior as implemented.
+Keep commands, accepted flags, defaults, paths, and behavior in the READMEs and both user-guide languages synchronized with the code. Use concise factual prose and avoid documenting planned behavior as implemented.
 
 Before editing, inspect `git status`, `git diff`, and `git diff --cached`. Preserve unrelated user changes and report exactly which files were changed and which checks ran. Do not commit, tag, push, publish a release, reset history, or delete user data unless the user explicitly requests it.

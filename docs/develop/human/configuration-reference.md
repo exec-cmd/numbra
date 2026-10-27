@@ -26,7 +26,7 @@ The SQLite database (`numbra.sqlite3`) and log (`numbra.log`) use the platform d
 
 ## Main settings
 
-The default `numbra.toml` contains `[challenge]` values for `duration_minutes` (6), `difficulty` (`normal`), `stages` (3), and `operations` (`["+", "-", "*", "/"]`). An optional integer `seed` may be set; omit it to generate a new session seed. Supported difficulty values are `easy`, `normal`, `hard`, and `very-hard`.
+The default `numbra.toml` contains `[challenge]` values for `duration_minutes` (6), `difficulty` (`normal`), `stages` (3), and `operations` (`["+", "-", "*", "/"]`). An optional integer `seed` may be set; omit it to generate a new session seed. Supported difficulty values are `easy`, `normal`, and `hard`.
 
 `[features]` accepts five boolean values, all `false` by default:
 
@@ -51,12 +51,13 @@ Each `[difficulties.<level>]` table accepts `min_value`, `max_value`, `min_terms
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `easy` | 1 | 20 | 2 | 2 | 400 |
 | `normal` | 2 | 50 | 2 | 3 | 500 |
-| `hard` | 5 | 150 | 3 | 4 | 3,000 |
-| `very-hard` | 10 | 999 | 3 | 4 | 10,000 |
+| `hard` | 5 | 999 | 3 | 4 | 10,000 |
 
 Profiles are static. Values must define a valid operand and term range, and `max_result` must be positive. The result bound is applied to generated intermediate values and answers.
 
-For migration, legacy `challenge.difficulty = "very-easy"` is read as `easy` and produces a warning. A legacy `[difficulties.very-easy]` table is ignored with a warning. Numbra does not rewrite the existing TOML file; edit or remove those legacy values yourself. A new configuration file contains only the current difficulty profiles.
+Work-unit bands are fixed in `core/generator.py` (`WORK_BANDS`): easy 1–2, normal 2–5, hard 4–9. Four-number problems cannot exceed 9 units under the current heuristic, which is why `very-hard` (6–12) was removed in 1.3.
+
+For migration, legacy `challenge.difficulty = "very-easy"` or `"very-hard"` is read as `easy` or `hard` and produces a warning (`_LEGACY_DIFFICULTIES` in `config/manager.py`). Legacy `[difficulties.very-easy]` and `[difficulties.very-hard]` tables are ignored with a warning. Stored sessions keep their original difficulty string and remain readable. Numbra does not rewrite the existing TOML file; edit or remove those legacy values yourself. A new configuration file contains only the current difficulty profiles.
 
 ## Templates and styles
 

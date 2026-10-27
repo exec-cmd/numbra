@@ -17,7 +17,7 @@ operations = ["+", "-", "*", "/"]
 sqrt = true
 ```
 
-The supported difficulties are `easy`, `normal`, `hard`, and `very-hard`. Advanced topics (`sqrt`, `trig`, `log`, `power`, and `identities`) are off by default. `identities` is a separate choice and is not an operation in the `operations` list. See [Usage](usage.md) for command-line switches and topic behavior.
+The supported difficulties are `easy`, `normal`, and `hard`. Older files that still say `very-easy` or `very-hard` keep working: they are read as `easy` or `hard` with a warning, and matching `[difficulties.very-easy]` or `[difficulties.very-hard]` tables are ignored with a warning. Numbra never rewrites your file; remove those values when convenient. Advanced topics (`sqrt`, `trig`, `log`, `power`, and `identities`) are off by default. `identities` is a separate choice and is not an operation in the `operations` list. See [Usage](usage.md) for command-line switches and [Training rules](training.md) for difficulty profiles.
 
 Leave out `seed` to get a new random sequence each time. Set an integer seed when you want to repeat a generated session with matching settings.
 

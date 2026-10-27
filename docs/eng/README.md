@@ -1,3 +1,7 @@
 # Numbra user guide
 
-Numbra is a terminal app for timed arithmetic practice. Start with [Usage](usage.md) for installation, challenge options, and result history, or see [Configuration](configuration.md) to make your preferred settings persistent.
+Numbra is a terminal app for daily timed arithmetic practice.
+
+- [Usage](usage.md) — installation, challenge options, progress output, and result history.
+- [Training rules](training.md) — difficulty levels, stages, time limits, points, records, and streaks.
+- [Configuration](configuration.md) — persistent settings and file locations.
