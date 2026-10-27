@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from dataclasses import replace
 from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
+
+import pytest
 
 from numbra.config import ConfigManager, ConfigPaths
 from numbra.core.challenge import (
@@ -17,6 +20,84 @@ from numbra.core.challenge import (
 from numbra.core.generator import complexity_score
 from numbra.core.models import Difficulty, Operation, Problem, StageKind, Topic
 from numbra.core.stats import Stats
+
+
+def test_stats_closes_every_connection(tmp_path: Path, monkeypatch) -> None:
+    connections = []
+    connect = sqlite3.connect
+
+    def capture_connection(*args, **kwargs):
+        connection = connect(*args, **kwargs)
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(sqlite3, "connect", capture_connection)
+    stats = Stats(tmp_path / "closed.sqlite3")
+    training = _training()
+    stats.save(training)
+    stats.history()
+    stats.aggregate()
+    stats.comparable_history(training)
+    stats.reset()
+
+    assert len(connections) == 6
+    for connection in connections:
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            connection.execute("SELECT 1")
+
+
+def test_failed_save_rolls_back_the_whole_training(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "rollback.sqlite3")
+    with closing(sqlite3.connect(stats.database_path)) as connection, connection:
+        connection.execute(
+            "CREATE TRIGGER fail_attempt BEFORE INSERT ON attempts "
+            "BEGIN SELECT RAISE(ABORT, 'attempt rejected'); END"
+        )
+
+    with pytest.raises(sqlite3.IntegrityError, match="attempt rejected"):
+        stats.save(_training())
+
+    assert stats.history() == []
+    with closing(sqlite3.connect(stats.database_path)) as connection:
+        for table in ("trainings", "stages", "attempts"):
+            assert connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
+
+
+def test_comparable_history_stops_decoding_after_limit(tmp_path: Path, monkeypatch) -> None:
+    import numbra.core.stats as stats_module
+
+    stats = Stats(tmp_path / "limited.sqlite3")
+    candidate = _training()
+    for started_at in (100.0, 101.0):
+        stats.save(replace(candidate, started_at=started_at))
+    stats.save(replace(candidate, started_at=102.0, operations=(Operation.ADD,)))
+    decoded = []
+    original = stats_module._training_record
+
+    def capture_record(row):
+        decoded.append(row["started_at"])
+        return original(row)
+
+    monkeypatch.setattr(stats_module, "_training_record", capture_record)
+
+    assert [row.started_at for row in stats.comparable_history(candidate, limit=1)] == [101.0]
+    assert decoded == [101.0]
+
+
+def test_aggregate_keeps_repeated_operation_counts(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "repeated.sqlite3")
+    training = _training()
+    problem = replace(training.stages[0].problems[0], operations=(Operation.DIVIDE,) * 2)
+    stage = replace(training.stages[0], problems=(problem,))
+    for correct in (True, True, False):
+        attempt = replace(training.attempts[0], is_correct=correct)
+        stats.save(replace(training, stages=(stage,), attempts=(attempt,)))
+
+    aggregate = stats.aggregate()
+
+    assert aggregate.by_operation == {"/": (6, 4)}
+    assert aggregate.by_topic == {"power": (3, 2)}
+    assert aggregate.completed_trainings == 3
 
 
 def expected_problem_score(problem: Problem) -> Decimal:

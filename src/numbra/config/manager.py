@@ -20,29 +20,55 @@ class ConfigManager:
         self.paths = paths or default_config_paths()
 
     def load_or_create(self) -> Settings:
-        self.paths.root.mkdir(parents=True, exist_ok=True)
+        try:
+            self.paths.root.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ConfigError(f"{self.paths.root}: cannot create config directory: {exc}") from exc
         for path, content in (
             (self.paths.main, _DEFAULT_TOML),
             (self.paths.templates, _DEFAULT_TEMPLATES),
             (self.paths.design, _DEFAULT_DESIGN),
         ):
-            if not path.exists():
-                path.write_text(content, encoding="utf-8")
+            try:
+                with path.open("x", encoding="utf-8") as file:
+                    file.write(content)
+            except FileExistsError:
+                pass
+            except OSError as exc:
+                raise ConfigError(f"{path.name}: cannot create config file: {exc}") from exc
         try:
             with self.paths.main.open("rb") as file:
                 main = tomllib.load(file)
-        except (OSError, tomllib.TOMLDecodeError) as exc:
+        except (OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
             raise ConfigError(f"{self.paths.main.name}: invalid TOML: {exc}") from exc
         try:
             templates = json.loads(self.paths.templates.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             raise ConfigError(f"{self.paths.templates.name}: invalid JSON: {exc}") from exc
         try:
             with self.paths.design.open("rb") as file:
                 design = tomllib.load(file)
-        except (OSError, tomllib.TOMLDecodeError) as exc:
+        except (OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
             raise ConfigError(f"{self.paths.design.name}: invalid TOML: {exc}") from exc
         return _parse_settings(main, templates, design, self.paths)
+
+
+def _integer(value: Any, field: str) -> int:
+    if type(value) is not int:
+        raise ValueError(f"{field} must be an integer")
+    return value
+
+
+def _number(value: Any, field: str) -> float:
+    if type(value) not in (int, float):
+        raise ValueError(f"{field} must be a number")
+    try:
+        result = float(value)
+    except OverflowError as exc:
+        raise ValueError(f"{field} must be finite") from exc
+    if not math.isfinite(result):
+        raise ValueError(f"{field} must be finite")
+    return result
 
 
 def _parse_settings(
@@ -68,8 +94,11 @@ def _parse_settings(
         raise ConfigError(f"{paths.main.name}: unknown field {sorted(unknown_root)[0]}")
     warnings: list[str] = []
     try:
-        duration = int(challenge.get("duration_minutes", defaults.duration_minutes))
-        stages = int(challenge.get("stages", defaults.stages))
+        duration = _integer(
+            challenge.get("duration_minutes", defaults.duration_minutes),
+            "challenge.duration_minutes",
+        )
+        stages = _integer(challenge.get("stages", defaults.stages), "challenge.stages")
         raw_difficulty = challenge.get("difficulty", defaults.difficulty)
         if raw_difficulty == "very-easy":
             difficulty = Difficulty.EASY
@@ -79,9 +108,16 @@ def _parse_settings(
         else:
             difficulty = Difficulty(raw_difficulty)
         seed_value = challenge.get("seed")
-        seed = None if seed_value is None else int(seed_value)
+        seed = None if seed_value is None else _integer(seed_value, "challenge.seed")
         operation_values = challenge.get("operations", [item.value for item in defaults.operations])
-        operations = parse_operation_selection(operation_values)
+        if not isinstance(operation_values, list) or not all(
+            isinstance(item, str) for item in operation_values
+        ):
+            raise ValueError("challenge.operations must be an array of strings")
+        try:
+            operations = parse_operation_selection(operation_values)
+        except ValueError as exc:
+            raise ValueError(f"challenge.operations: {exc}") from exc
     except (TypeError, ValueError) as exc:
         raise ConfigError(f"{paths.main.name}: invalid challenge field: {exc}") from exc
     if duration < 1:
@@ -147,8 +183,6 @@ def _parse_features(value: Any, paths: ConfigPaths) -> dict[Topic, bool]:
 
 def _parse_stage_limits(value: Any, paths: ConfigPaths) -> dict[StageKind, float]:
     defaults = ChallengeConfig().stage_limits
-    if not value:
-        return defaults
     if not isinstance(value, dict) or set(value) - {kind.value for kind in StageKind}:
         raise ConfigError(f"{paths.main.name}: unknown field stages")
     limits: dict[StageKind, float] = {}
@@ -157,13 +191,11 @@ def _parse_stage_limits(value: Any, paths: ConfigPaths) -> dict[StageKind, float
             raw = value.get(kind.value, {})
             if not isinstance(raw, dict) or set(raw) - {"limit_seconds"}:
                 raise ValueError(f"unknown field stages.{kind.value}")
-            limit = float(
-                raw.get(
-                    "limit_seconds",
-                    defaults[kind],
-                )
+            limit = _number(
+                raw.get("limit_seconds", defaults[kind]),
+                f"stages.{kind.value}.limit_seconds",
             )
-            if not math.isfinite(limit) or limit <= 0:
+            if limit <= 0:
                 raise ValueError(f"stages.{kind.value}.limit_seconds must be positive")
             limits[kind] = limit
     except (TypeError, ValueError) as exc:
@@ -174,6 +206,9 @@ def _parse_stage_limits(value: Any, paths: ConfigPaths) -> dict[StageKind, float
 def _parse_profiles(value: Any, paths: ConfigPaths) -> dict[Difficulty, DifficultyConfig]:
     if not isinstance(value, dict):
         raise ConfigError(f"{paths.main.name}: difficulties must be a table")
+    unknown = set(value) - {level.value for level in Difficulty} - {"very-easy"}
+    if unknown:
+        raise ConfigError(f"{paths.main.name}: unknown field difficulties.{sorted(unknown)[0]}")
     defaults = ChallengeConfig().profiles
     profiles: dict[Difficulty, DifficultyConfig] = {}
     try:
@@ -189,7 +224,7 @@ def _parse_profiles(value: Any, paths: ConfigPaths) -> dict[Difficulty, Difficul
                 raise ValueError(f"unknown field difficulties.{level.value}")
             profile = DifficultyConfig(
                 *(
-                    int(raw.get(name, default))
+                    _integer(raw.get(name, default), f"difficulties.{level.value}.{name}")
                     for name, default in zip(
                         ("min_value", "max_value", "min_terms", "max_terms", "max_result"),
                         (
@@ -230,10 +265,11 @@ def _parse_timing(value: Any, paths: ConfigPaths) -> OperationTimingConfig:
         raise ConfigError(f"{paths.main.name}: invalid timing field")
     try:
         parsed = defaults.bonus_seconds | {
-            Operation(key): float(raw) for key, raw in bonuses.items()
+            Operation(key): _number(raw, f"timing.operation_bonus_seconds.{key}")
+            for key, raw in bonuses.items()
         }
     except (TypeError, ValueError) as exc:
         raise ConfigError(f"{paths.main.name}: invalid timing operation field: {exc}") from exc
-    if any(not math.isfinite(seconds) or seconds < 0 for seconds in parsed.values()):
+    if any(seconds < 0 for seconds in parsed.values()):
         raise ConfigError(f"{paths.main.name}: timing bonuses must be non-negative")
     return OperationTimingConfig(enabled, parsed)

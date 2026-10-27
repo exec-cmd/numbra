@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -56,10 +58,11 @@ class Stats:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.database_path)
-        connection.row_factory = sqlite3.Row
-        return connection
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        with closing(sqlite3.connect(self.database_path)) as connection, connection:
+            connection.row_factory = sqlite3.Row
+            yield connection
 
     def _initialize(self) -> None:
         with self._connect() as connection:
@@ -234,9 +237,10 @@ class Stats:
                 "WHERE t.status = 'completed' AND a.timed_out = 0"
             ).fetchone()
             operation_rows = connection.execute(
-                "SELECT a.operations, a.topics, a.is_correct FROM attempts a "
+                "SELECT a.operations, a.topics, a.is_correct, COUNT(*) AS total FROM attempts a "
                 "JOIN stages s ON s.id = a.stage_id "
-                "JOIN trainings t ON t.id = s.training_id WHERE t.status = 'completed'"
+                "JOIN trainings t ON t.id = s.training_id WHERE t.status = 'completed' "
+                "GROUP BY a.operations, a.topics, a.is_correct"
             ).fetchall()
             difficulty_rows = connection.execute(
                 "SELECT difficulty, COALESCE(SUM(total_examples), 0) AS total, "
@@ -249,12 +253,12 @@ class Stats:
         for item in operation_rows:
             for operation in json.loads(item["operations"]):
                 values = operation_totals.setdefault(operation, [0, 0])
-                values[0] += 1
-                values[1] += int(item["is_correct"])
+                values[0] += item["total"]
+                values[1] += item["total"] * int(item["is_correct"])
             for topic in json.loads(item["topics"]):
                 values = topic_totals.setdefault(topic, [0, 0])
-                values[0] += 1
-                values[1] += int(item["is_correct"])
+                values[0] += item["total"]
+                values[1] += item["total"] * int(item["is_correct"])
         by_operation = {
             operation: (values[0], values[1]) for operation, values in operation_totals.items()
         }
@@ -297,9 +301,14 @@ class Stats:
                     training.scoring_version,
                     training.settings_fingerprint,
                 ),
-            ).fetchall()
-        records = [_training_record(row) for row in rows]
-        return [row for row in records if tuple(sorted(row.operations)) == operations][:limit]
+            )
+            records = []
+            for row in rows:
+                if tuple(sorted(json.loads(row["operations"]))) == operations:
+                    records.append(_training_record(row))
+                    if len(records) == limit:
+                        break
+        return records
 
 
 def _training_record(row: sqlite3.Row) -> TrainingRecord:

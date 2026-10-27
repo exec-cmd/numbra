@@ -15,6 +15,44 @@ from numbra.core.expressions import (
 from numbra.core.models import Difficulty, Operation, Problem, Topic
 
 
+def test_hashing_an_expression_does_not_rehash_its_children(monkeypatch) -> None:
+    tree = Expr.binary("+", Expr.number(2), Expr.number(3))
+    original = Expr.__hash__
+    visited = []
+
+    def capture_hash(self):
+        visited.append(self.kind)
+        return original(self)
+
+    monkeypatch.setattr(Expr, "__hash__", capture_hash)
+
+    assert hash(tree) == hash(tree)
+    assert visited == ["+", "+"]
+
+
+def test_expression_hash_survives_pickle_in_another_process() -> None:
+    import base64
+    import pickle
+    import subprocess
+    import sys
+
+    tree = Expr.binary("+", Expr.number(2), Expr.number(3))
+    encoded = base64.b64encode(pickle.dumps(tree)).decode("ascii")
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import base64, pickle, sys; from numbra.core.expressions import Expr; "
+            "tree = pickle.loads(base64.b64decode(sys.argv[1])); "
+            "other = Expr.binary('+', Expr.number(2), Expr.number(3)); "
+            "assert tree == other; assert hash(tree) == hash(other); "
+            "assert {tree: 1}[other] == 1",
+            encoded,
+        ],
+        check=True,
+    )
+
+
 def test_model_adds_topics_and_expression_metadata_without_shifting_positional_fields() -> None:
     assert [item.value for item in Difficulty] == ["easy", "normal", "hard", "very-hard"]
     problem = Problem("2 + 3", 5, (Operation.ADD,))

@@ -135,3 +135,72 @@ def test_operation_timing_disable_can_omit_bonus_table(tmp_path: Path) -> None:
     )
     settings = ConfigManager(paths).load_or_create()
     assert settings.challenge.operation_timing.enabled is False
+
+
+@pytest.mark.parametrize(
+    ("text", "field"),
+    [
+        ("[challenge]\nduration_minutes = true", "challenge.duration_minutes"),
+        ("[challenge]\nduration_minutes = 1.9", "challenge.duration_minutes"),
+        ('[challenge]\nstages = "3"', "challenge.stages"),
+        ("[challenge]\nseed = false", "challenge.seed"),
+        ('[challenge]\noperations = "+-"', "challenge.operations"),
+        ('[challenge]\noperations = ["+", 1]', "challenge.operations"),
+        ("stages = []\n[challenge]", "stages"),
+        ("[challenge]\n[difficulties.typo]\nmax_result = 2", "difficulties.typo"),
+        ("[challenge]\n[difficulties.easy]\nmin_value = true", "difficulties.easy.min_value"),
+        ("[challenge]\n[difficulties.normal]\nmax_terms = 3.5", "difficulties.normal.max_terms"),
+        ("[challenge]\n[stages.slow]\nlimit_seconds = true", "stages.slow.limit_seconds"),
+        (
+            '[challenge]\n[timing.operation_bonus_seconds]\n"+" = "1"',
+            "timing.operation_bonus_seconds",
+        ),
+    ],
+)
+def test_invalid_config_types_report_filename_and_field(
+    tmp_path: Path, text: str, field: str
+) -> None:
+    paths = ConfigPaths.from_root(tmp_path)
+    manager = ConfigManager(paths)
+    manager.load_or_create()
+    paths.main.write_text(text, encoding="utf-8")
+
+    with pytest.raises(ConfigError) as error:
+        manager.load_or_create()
+
+    assert paths.main.name in str(error.value)
+    assert field in str(error.value)
+
+
+@pytest.mark.parametrize("filename", ["numbra.toml", "temps.json", "design.toml"])
+def test_invalid_file_encoding_is_a_config_error(tmp_path: Path, filename: str) -> None:
+    manager = ConfigManager(ConfigPaths.from_root(tmp_path))
+    manager.load_or_create()
+    (tmp_path / filename).write_bytes(b"\xff")
+
+    with pytest.raises(ConfigError, match=filename):
+        manager.load_or_create()
+
+
+def test_config_directory_creation_error_is_user_facing(tmp_path: Path) -> None:
+    root = tmp_path / "blocked-config"
+    root.write_text("a file occupies the directory", encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="blocked-config"):
+        ConfigManager(ConfigPaths.from_root(root)).load_or_create()
+
+
+def test_config_file_creation_error_mentions_filename(tmp_path: Path, monkeypatch) -> None:
+    from pathlib import Path
+
+    original = Path.open
+
+    def deny_main_file(self, *args, **kwargs):
+        if self.name == "numbra.toml":
+            raise PermissionError("read-only config")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", deny_main_file)
+
+    with pytest.raises(ConfigError, match="numbra.toml"):
+        ConfigManager(ConfigPaths.from_root(tmp_path)).load_or_create()

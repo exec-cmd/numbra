@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fractions import Fraction
 from functools import lru_cache
 
@@ -13,6 +13,17 @@ class Expr:
     kind: str
     args: tuple[Expr, ...] = ()
     value: int = 0
+    _hash: int = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_hash", hash((self.kind, self.args, self.value)))
+
+    def __hash__(self) -> int:
+        return self._hash
+
+    def __reduce__(self) -> tuple[type[Expr], tuple[str, tuple[Expr, ...], int]]:
+        # String hashes are process-local; reconstruct rather than serialize the cached hash.
+        return type(self), (self.kind, self.args, self.value)
 
     @classmethod
     def number(cls, n: int) -> Expr:
