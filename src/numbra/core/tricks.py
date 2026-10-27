@@ -75,6 +75,21 @@ def _plain(low: int, high: int, step: int = 1) -> range | tuple[int, ...]:
 
 
 def _candidates() -> Iterator[tuple[Expr, str, int]]:
+    # Pattern-specific tricks come first: the first trick to claim a problem keeps it,
+    # and 88 * 89 is a near-100 problem even though round-and-adjust also builds it.
+    for n in range(15, 100, 10):
+        yield B("*", N(n), N(n)), "square-ending-5", 2 if n <= 45 else 3
+    for tens in range(1, 10):
+        for unit in range(1, 5):
+            a, b = 10 * tens + unit, 10 * tens + 10 - unit
+            units = 2 if tens == 1 else 3 if tens <= 4 else 4
+            yield B("*", N(a), N(b)), "same-decade", units
+    for a in range(88, 100):
+        for b in range(a, 100):
+            yield B("*", N(a), N(b)), "near-100", 4 if a >= 95 else 5
+    for n in range(41, 60):
+        if n not in (45, 50, 55):
+            yield B("*", N(n), N(n)), "square-near-50", 3 if abs(n - 50) <= 3 else 4
     for n in _plain(12, 2000):
         units = (1 if n % 2 == 0 else 2) if n < 100 else 3 if n < 1000 else 4
         yield B("*", N(n), N(5)), "times-5", units
@@ -112,8 +127,6 @@ def _candidates() -> Iterator[tuple[Expr, str, int]]:
             for a in (r - 1, r + 1):
                 for m in _plain(12, 100):
                     yield B("*", N(a), N(m)), "round-and-adjust", units
-    for n in range(15, 100, 10):
-        yield B("*", N(n), N(n)), "square-ending-5", 2 if n <= 45 else 3
     # 25 and 50 are excluded: those products belong to times-25 and times-50.
     for e in (*range(12, 100, 2), *range(102, 1000, 2)):
         if e % 10:
@@ -125,17 +138,6 @@ def _candidates() -> Iterator[tuple[Expr, str, int]]:
             if dividend % 100:
                 units = small if dividend < 1000 else large
                 yield B("/", N(dividend), N(divisor)), "divide-by-5-or-25", units
-    for tens in range(1, 10):
-        for unit in range(1, 5):
-            a, b = 10 * tens + unit, 10 * tens + 10 - unit
-            units = 2 if tens == 1 else 3 if tens <= 4 else 4
-            yield B("*", N(a), N(b)), "same-decade", units
-    for a in range(88, 100):
-        for b in range(a, 100):
-            yield B("*", N(a), N(b)), "near-100", 4 if a >= 95 else 5
-    for n in range(41, 60):
-        if n not in (45, 50, 55):
-            yield B("*", N(n), N(n)), "square-near-50", 3 if abs(n - 50) <= 3 else 4
 
 
 @lru_cache(maxsize=8)
