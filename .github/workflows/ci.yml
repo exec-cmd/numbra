@@ -11,8 +11,8 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     env:
-      XDG_CONFIG_HOME: ${{ runner.temp }}/numbra-ci-config
-      XDG_DATA_HOME: ${{ runner.temp }}/numbra-ci-data
+      XDG_CONFIG_HOME: /tmp/numbra-ci-config
+      XDG_DATA_HOME: /tmp/numbra-ci-data
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6

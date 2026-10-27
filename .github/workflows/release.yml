@@ -12,8 +12,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      XDG_CONFIG_HOME: ${{ runner.temp }}/numbra-release-config
-      XDG_DATA_HOME: ${{ runner.temp }}/numbra-release-data
+      XDG_CONFIG_HOME: /tmp/numbra-release-config
+      XDG_DATA_HOME: /tmp/numbra-release-data
     steps:
       - name: Checkout
         uses: actions/checkout@v4
