@@ -5,6 +5,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from .challenge import AnswerAttempt, CompletedTraining
@@ -33,10 +34,30 @@ class TrainingRecord:
     generation_version: int = 1
     scoring_version: int = 1
     settings_fingerprint: str = ""
+    average_correct_seconds: float | None = None
 
     @property
     def score_percent(self) -> float:
         return self.score / self.max_score if self.max_score else 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class PersonalRecord:
+    difficulty: str
+    strict: bool
+    operations: tuple[str, ...]
+    topics: tuple[str, ...]
+    sessions: int
+    best_score_percent: float
+    best_average_correct_seconds: float | None
+
+
+# Completed trainings with the mean time of their correct answers (NULL when none).
+_COMPLETED = (
+    "SELECT t.*, (SELECT AVG(a.elapsed) FROM attempts a JOIN stages s ON s.id = a.stage_id "
+    "WHERE s.training_id = t.id AND a.is_correct = 1) AS average_correct "
+    "FROM trainings t WHERE t.status = 'completed' "
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,8 +239,7 @@ class Stats:
     def history(self, limit: int = 10) -> list[TrainingRecord]:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM trainings WHERE status = 'completed' "
-                "ORDER BY started_at DESC LIMIT ?",
+                _COMPLETED + "ORDER BY started_at DESC LIMIT ?",
                 (max(0, limit),),
             ).fetchall()
         return [_training_record(row) for row in rows]
@@ -287,7 +307,7 @@ class Stats:
         topics = json.dumps([topic.value for topic in training.topics])
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM trainings WHERE status = 'completed' AND difficulty = ? "
+                _COMPLETED + "AND difficulty = ? "
                 "AND stages = ? AND strict_mode = ? AND target_seconds = ? AND topics = ? "
                 "AND generation_version = ? AND scoring_version = ? "
                 "AND settings_fingerprint = ? ORDER BY started_at DESC",
@@ -309,6 +329,81 @@ class Stats:
                     if len(records) == limit:
                         break
         return records
+
+    def progress_history(
+        self, training: CompletedTraining, limit: int | None = None
+    ) -> list[TrainingRecord]:
+        """Completed trainings in the same progress group, newest first."""
+        if limit is not None and limit <= 0:
+            return []
+        key = (
+            training.difficulty.value,
+            training.strict,
+            tuple(sorted(operation.value for operation in training.operations)),
+            tuple(sorted(topic.value for topic in training.topics)),
+        )
+        with self._connect() as connection:
+            rows = connection.execute(
+                _COMPLETED + "AND difficulty = ? AND strict_mode = ? ORDER BY started_at DESC",
+                (training.difficulty.value, int(training.strict)),
+            ).fetchall()
+        records = [record for record in map(_training_record, rows) if _group(record) == key]
+        return records if limit is None else records[:limit]
+
+    def records(self) -> list[PersonalRecord]:
+        with self._connect() as connection:
+            rows = connection.execute(_COMPLETED + "ORDER BY started_at").fetchall()
+        groups: dict[tuple[str, bool, tuple[str, ...], tuple[str, ...]], list[TrainingRecord]] = {}
+        for record in map(_training_record, rows):
+            groups.setdefault(_group(record), []).append(record)
+        result = []
+        for (difficulty, strict, operations, topics), items in groups.items():
+            times = [
+                r.average_correct_seconds for r in items if r.average_correct_seconds is not None
+            ]
+            result.append(
+                PersonalRecord(
+                    difficulty,
+                    strict,
+                    operations,
+                    topics,
+                    len(items),
+                    max(r.score_percent for r in items),
+                    min(times, default=None),
+                )
+            )
+        return sorted(result, key=lambda record: -record.sessions)
+
+    def streak(self, today: date) -> tuple[int, int]:
+        """Current and best runs of consecutive local days with a completed training."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT started_at FROM trainings WHERE status = 'completed'"
+            ).fetchall()
+        days = {datetime.fromtimestamp(row["started_at"]).date() for row in rows}
+        best = run = 0
+        previous: date | None = None
+        for day in sorted(days):
+            run = run + 1 if previous is not None and day - previous == timedelta(days=1) else 1
+            best = max(best, run)
+            previous = day
+        # A streak survives until the end of the day after the last training.
+        cursor = today if today in days else today - timedelta(days=1)
+        current = 0
+        while cursor in days:
+            current += 1
+            cursor -= timedelta(days=1)
+        return current, best
+
+
+def _group(record: TrainingRecord) -> tuple[str, bool, tuple[str, ...], tuple[str, ...]]:
+    """Progress group: survives generator updates and duration changes."""
+    return (
+        record.difficulty,
+        record.strict,
+        tuple(sorted(record.operations)),
+        tuple(sorted(record.topics)),
+    )
 
 
 def _training_record(row: sqlite3.Row) -> TrainingRecord:
@@ -333,4 +428,5 @@ def _training_record(row: sqlite3.Row) -> TrainingRecord:
         row["generation_version"],
         row["scoring_version"],
         row["settings_fingerprint"],
+        row["average_correct"] if "average_correct" in row.keys() else None,
     )

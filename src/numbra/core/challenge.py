@@ -106,6 +106,11 @@ class CompletedTraining:
         return sum(answered) / len(answered) if answered else 0.0
 
     @property
+    def average_correct_seconds(self) -> float | None:
+        correct = [attempt.elapsed_seconds for attempt in self.attempts if attempt.is_correct]
+        return sum(correct) / len(correct) if correct else None
+
+    @property
     def accuracy(self) -> float:
         return self.correct_answers / self.total_examples if self.total_examples else 0.0
 
