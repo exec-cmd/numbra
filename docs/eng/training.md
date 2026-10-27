@@ -10,7 +10,7 @@ Each level combines a fixed operand profile with a band of *work units*, a trans
 | `normal` | 2–50 | 2–3 | 500 | 2–5 |
 | `hard` | 5–999 | 3–4 | 10,000 | 4–9 |
 
-Inside a stage, problems cycle through every work-unit level of the band in a shuffled order, so a stage mixes lighter and heavier problems instead of staying at one level. Selected operations stay balanced. Large operands (above 12) are not repeated more than three times per session while other problems are available, and `normal` and `hard` skip divisions whose quotient is below 3.
+Inside a stage, problems cycle through every work-unit level of the band in a shuffled order, so a stage mixes lighter and heavier problems instead of staying at one level. Selected operations stay balanced. Numbra avoids repeating a large operand (above 12): in a default six-minute session none appears more than three times, though long sessions may repeat some more often. Also, `normal` and `hard` skip divisions whose quotient is below 3.
 
 Arithmetic follows standard precedence and is exact; division never divides a value by itself, and negative intermediate values and answers are allowed. A seed reproduces the same sequence for the same settings. Exercise collections are finite: when one is exhausted, examples repeat and Numbra prints a warning.
 
