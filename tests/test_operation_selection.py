@@ -60,7 +60,7 @@ def test_advanced_adds_basic_operations_and_all_topics():
         Operation.MULTIPLY,
         Operation.DIVIDE,
     }
-    assert set(result.topics) == set(Topic) - {Topic.IDENTITIES}
+    assert set(result.topics) == set(Topic) - {Topic.IDENTITIES, Topic.TRICKS}
     assert any(p.family == "arithmetic" for s in result.stages for p in s.problems)
 
 
@@ -141,7 +141,7 @@ def test_cli_feature_flags_override_config_and_advanced_defaults() -> None:
         ChallengeOptions(seed=42, advanced=True, sqrt=False)
     )
 
-    assert set(session.topics) == set(Topic) - {Topic.SQRT}
+    assert set(session.topics) == set(Topic) - {Topic.SQRT, Topic.TRICKS}
 
 
 def test_advanced_flags_can_disable_trig_and_power() -> None:

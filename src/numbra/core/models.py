@@ -35,6 +35,7 @@ class Topic(StrEnum):
     LOG = "log"
     POWER = "power"
     IDENTITIES = "identities"
+    TRICKS = "tricks"
 
 
 BASIC_OPERATIONS = (Operation.ADD, Operation.SUBTRACT, Operation.MULTIPLY, Operation.DIVIDE)
@@ -46,10 +47,14 @@ def parse_operation_selection(values: Iterable[str]) -> tuple[Operation | Topic,
     for value in values:
         try:
             item: Operation | Topic = (
-                Topic(value) if value in {"sqrt", "trig", "log", "power"} else Operation(value)
+                Topic(value)
+                if value in {"sqrt", "trig", "log", "power", "tricks"}
+                else Operation(value)
             )
         except ValueError as exc:
-            raise ValueError("unsupported operation; use +,-,*,/,^,sqrt,trig,log,power") from exc
+            raise ValueError(
+                "unsupported operation; use +,-,*,/,^,sqrt,trig,log,power,tricks"
+            ) from exc
         if item not in selected:
             selected.append(item)
     if not selected:

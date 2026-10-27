@@ -10,6 +10,7 @@ trig = false
 log = false
 power = false
 identities = false
+tricks = false
 
 [timing]
 operation_bonus_enabled = true

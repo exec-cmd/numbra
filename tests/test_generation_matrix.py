@@ -8,7 +8,12 @@ import pytest
 from numbra.config.models import ChallengeConfig, Settings
 from numbra.core.challenge import Challenge, ChallengeOptions
 from numbra.core.expressions import Expr, parse_expression
-from numbra.core.generator import WORK_BANDS, canonical_problem_key, complexity_score
+from numbra.core.generator import (
+    TRICK_MAX_RESULT,
+    WORK_BANDS,
+    canonical_problem_key,
+    complexity_score,
+)
 from numbra.core.models import Difficulty, Topic
 
 
@@ -73,7 +78,11 @@ def test_one_hundred_seeds_per_difficulty_and_topic(
         )
         problems = [p for stage in session.stages for p in stage.problems]
         expected_topics = (
-            set(Topic) if feature == "advanced" else set() if feature is None else {Topic(feature)}
+            set(Topic) - {Topic.TRICKS}
+            if feature == "advanced"
+            else set()
+            if feature is None
+            else {Topic(feature)}
         )
         assert set(session.topics) == expected_topics
         assert {topic for p in problems for topic in p.topics} == expected_topics
@@ -91,7 +100,12 @@ def test_one_hundred_seeds_per_difficulty_and_topic(
             assert Fraction(p.answer) == independent(p.as_tree())
             assert Fraction(p.answer) == independent(parse_expression(p.expression))
             assert WORK_BANDS[level][0] <= complexity_score(p) - 2 <= WORK_BANDS[level][1]
-            assert abs(p.answer) <= settings.challenge.profiles[level].max_result
+            limit = (
+                TRICK_MAX_RESULT[level]
+                if p.family == "tricks"
+                else settings.challenge.profiles[level].max_result
+            )
+            assert abs(p.answer) <= limit
             assert Fraction(p.answer).denominator <= 12
             if p.family == "arithmetic":
                 assert set(p.operations) <= set(session.operations)

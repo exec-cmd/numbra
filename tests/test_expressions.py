@@ -60,7 +60,14 @@ def test_model_adds_topics_and_expression_metadata_without_shifting_positional_f
     assert problem.topics == ()
     assert problem.as_tree() == Expr.binary("+", Expr.number(2), Expr.number(3))
     assert problem.evaluate() == 5
-    assert tuple(item.value for item in Topic) == ("sqrt", "trig", "log", "power", "identities")
+    assert tuple(item.value for item in Topic) == (
+        "sqrt",
+        "trig",
+        "log",
+        "power",
+        "identities",
+        "tricks",
+    )
 
 
 def test_tree_evaluation_is_exact_and_does_not_trust_answer() -> None:

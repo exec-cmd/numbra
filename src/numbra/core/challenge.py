@@ -45,6 +45,7 @@ class ChallengeOptions:
     log: bool | None = None
     power: bool | None = None
     identities: bool | None = None
+    tricks: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,7 +287,11 @@ class Challenge:
             else {Topic.IDENTITIES: config.features.get(Topic.IDENTITIES, False)}
         )
         if options.advanced is not None:
-            features = {topic: options.advanced for topic in Topic}
+            # Tricks are chosen only explicitly (-o tricks or [features]), never by --advanced.
+            features = {
+                topic: options.advanced if topic is not Topic.TRICKS else features.get(topic, False)
+                for topic in Topic
+            }
             if options.advanced:
                 operations = BASIC_OPERATIONS
         if options.operations is not None or options.advanced is None:

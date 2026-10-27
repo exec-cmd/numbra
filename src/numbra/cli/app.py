@@ -63,7 +63,7 @@ def challenge(
         typer.Option(
             "-o",
             "--operations",
-            help="Comma-separated: +, -, *, /, sqrt, trig, log, power (^ alias).",
+            help="Comma-separated: +, -, *, /, sqrt, trig, log, power (^ alias), tricks.",
         ),
     ] = None,
     stages: Annotated[

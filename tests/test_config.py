@@ -239,3 +239,19 @@ def test_config_file_creation_error_mentions_filename(tmp_path: Path, monkeypatc
 
     with pytest.raises(ConfigError, match="numbra.toml"):
         ConfigManager(ConfigPaths.from_root(tmp_path)).load_or_create()
+
+
+def test_config_without_tricks_key_loads_with_tricks_off(tmp_path: Path) -> None:
+    from numbra.core.models import Topic
+
+    paths = ConfigPaths.from_root(tmp_path)
+    manager = ConfigManager(paths)
+    manager.load_or_create()
+    text = paths.main.read_text(encoding="utf-8")
+    assert "tricks = false\n" in text
+    paths.main.write_text(text.replace("tricks = false\n", ""), encoding="utf-8")
+
+    settings = manager.load_or_create()
+
+    assert settings.challenge.features[Topic.TRICKS] is False
+    assert settings.warnings == ()

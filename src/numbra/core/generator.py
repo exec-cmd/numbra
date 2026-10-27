@@ -8,6 +8,7 @@ from functools import lru_cache
 from .catalog import arithmetic_catalog, topic_catalog
 from .expressions import Expr, canonical_key, solution_steps, work_units
 from .models import BASIC_OPERATIONS, Difficulty, Operation, Problem, Topic
+from .tricks import trick_catalog
 
 
 class GenerationError(ValueError):
@@ -28,6 +29,13 @@ class DifficultyProfile:
 CANDIDATE_WINDOW = 4
 # A large operand may appear this many times per session while alternatives exist.
 OPERAND_REPEAT_CAP = 3
+
+# Tricks keep their own result ladder: a profile's max_result would hide most of them.
+TRICK_MAX_RESULT = {
+    Difficulty.EASY: 400,
+    Difficulty.NORMAL: 2_500,
+    Difficulty.HARD: 10_000,
+}
 
 WORK_BANDS = {
     Difficulty.EASY: (1, 2),
@@ -79,6 +87,7 @@ class ProblemGenerator:
         self._topic_counts: Counter[str] = Counter()
         self._operation_counts: Counter[Operation] = Counter()
         self._operand_counts: Counter[int] = Counter()
+        self._strategy_counts: Counter[str] = Counter()
         self._cycle: deque[int] = deque()
         self._groups: dict[str, list[tuple[tuple[Problem, ...], deque[Problem]]]] = defaultdict(
             list
@@ -128,6 +137,7 @@ class ProblemGenerator:
 
     def _take(self, family: str) -> Problem:
         groups = self._groups[family]
+        tricks = family == Topic.TRICKS.value
         target = self._next_level()
         choices: list[tuple[tuple[int, ...], int, int, Problem]] = []
         for i, (_, queue) in enumerate(groups):
@@ -140,8 +150,10 @@ class ProblemGenerator:
                 if canonical_problem_key(p) in self._seen:
                     continue
                 window += 1
+                # A trick fixes its own operation, so it does not weigh on the balance.
                 selected = [
-                    self._operation_counts[op] + p.operations.count(op) for op in self.operations
+                    self._operation_counts[op] + (0 if tricks else p.operations.count(op))
+                    for op in self.operations
                 ]
                 imbalance = max(selected, default=0) - min(selected, default=0)
                 numbers = _large_numbers(p)
@@ -154,6 +166,7 @@ class ProblemGenerator:
                     max(0, imbalance - 2),
                     int(overused),
                     abs(complexity_score(p) - 2 - target),
+                    self._strategy_counts[p.strategy] if tricks else 0,
                     reuse,
                     imbalance,
                 )
@@ -183,7 +196,10 @@ class ProblemGenerator:
         key = canonical_problem_key(p)
         self._seen.add(key)
         self._last = key
-        self._operation_counts.update(p.operations)
+        if tricks:
+            self._strategy_counts[p.strategy] += 1
+        else:
+            self._operation_counts.update(p.operations)
         self._operand_counts.update(_large_numbers(p))
         self._topic_counts.update({family: 1})
         return replace(p, solution_steps=solution_steps(p.as_tree()))
@@ -282,7 +298,15 @@ def _catalog_groups(
         elif Topic.POWER not in topics:
             topics += (Topic.POWER,)
     for topic in topics:
-        others = tuple(t for t in topics if t is not topic) if difficulty is Difficulty.HARD else ()
+        if topic is Topic.TRICKS:
+            limit = TRICK_MAX_RESULT[difficulty] if difficulty is not None else profile.max_result
+            pools[topic.value] = trick_catalog(limit)
+            continue
+        others = (
+            tuple(t for t in topics if t is not topic and t is not Topic.TRICKS)
+            if difficulty is Difficulty.HARD
+            else ()
+        )
         pools[topic.value] = topic_catalog(
             topic,
             profile.min_value,
@@ -310,7 +334,12 @@ def _catalog_groups(
                 continue
             seen.add(key)
             operation_counts = Counter(p.operations)
-            signature = (tuple(operation_counts[op] for op in Operation), units)
+            # Tricks rotate by strategy; one large trick would otherwise dominate a session.
+            signature = (
+                (p.strategy, units)
+                if family == Topic.TRICKS.value
+                else (tuple(operation_counts[op] for op in Operation), units)
+            )
             signatures[signature].append(p)
         if not signatures:
             raise GenerationError(
