@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from .challenge import CompletedTraining
+from .challenge import AnswerAttempt, CompletedTraining
 from .db.schema import SCHEMA
 
 
@@ -27,6 +27,10 @@ class TrainingRecord:
     cooldown_seconds: float
     score: float
     max_score: float
+    topics: tuple[str, ...] = ()
+    generation_version: int = 1
+    scoring_version: int = 1
+    settings_fingerprint: str = ""
 
     @property
     def score_percent(self) -> float:
@@ -43,6 +47,7 @@ class AggregateStats:
     timeouts: int
     by_operation: dict[str, tuple[int, int]]
     by_difficulty: dict[str, tuple[int, int]]
+    by_topic: dict[str, tuple[int, int]] = field(default_factory=dict)
 
 
 class Stats:
@@ -64,46 +69,71 @@ class Stats:
     @staticmethod
     def _migrate(connection: sqlite3.Connection) -> None:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
-        if version >= 1:
-            return
-        training_columns = {row[1] for row in connection.execute("PRAGMA table_info(trainings)")}
-        for name, definition in (
-            ("strict_mode", "INTEGER NOT NULL DEFAULT 0"),
-            ("cooldown_seconds", "REAL NOT NULL DEFAULT 2"),
-            ("score", "REAL NOT NULL DEFAULT 0"),
-            ("max_score", "REAL NOT NULL DEFAULT 0"),
-        ):
-            if name not in training_columns:
-                connection.execute(f"ALTER TABLE trainings ADD COLUMN {name} {definition}")
-        attempt_columns = {row[1] for row in connection.execute("PRAGMA table_info(attempts)")}
-        for name, definition in (
-            ("operations", "TEXT NOT NULL DEFAULT '[]'"),
-            ("overtime", "REAL NOT NULL DEFAULT 0"),
-            ("score", "REAL NOT NULL DEFAULT 0"),
-        ):
-            if name not in attempt_columns:
-                connection.execute(f"ALTER TABLE attempts ADD COLUMN {name} {definition}")
-        connection.execute(
-            "UPDATE trainings SET score = correct_answers, max_score = total_examples "
-            "WHERE max_score = 0"
-        )
-        rows = connection.execute(
-            "SELECT id, operation FROM attempts WHERE operations = '[]'"
-        ).fetchall()
-        for row in rows:
+        if version == 0:
+            training_columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(trainings)")
+            }
+            for name, definition in (
+                ("strict_mode", "INTEGER NOT NULL DEFAULT 0"),
+                ("cooldown_seconds", "REAL NOT NULL DEFAULT 2"),
+                ("score", "REAL NOT NULL DEFAULT 0"),
+                ("max_score", "REAL NOT NULL DEFAULT 0"),
+            ):
+                if name not in training_columns:
+                    connection.execute(f"ALTER TABLE trainings ADD COLUMN {name} {definition}")
+            attempt_columns = {row[1] for row in connection.execute("PRAGMA table_info(attempts)")}
+            for name, definition in (
+                ("operations", "TEXT NOT NULL DEFAULT '[]'"),
+                ("overtime", "REAL NOT NULL DEFAULT 0"),
+                ("score", "REAL NOT NULL DEFAULT 0"),
+            ):
+                if name not in attempt_columns:
+                    connection.execute(f"ALTER TABLE attempts ADD COLUMN {name} {definition}")
             connection.execute(
-                "UPDATE attempts SET operations = ? WHERE id = ?",
-                (json.dumps([row["operation"]]), row["id"]),
+                "UPDATE trainings SET score = correct_answers, max_score = total_examples "
+                "WHERE max_score = 0"
             )
-        connection.execute("PRAGMA user_version = 1")
+            rows = connection.execute(
+                "SELECT id, operation FROM attempts WHERE operations = '[]'"
+            ).fetchall()
+            for row in rows:
+                connection.execute(
+                    "UPDATE attempts SET operations = ? WHERE id = ?",
+                    (json.dumps([row["operation"]]), row["id"]),
+                )
+            connection.execute("PRAGMA user_version = 1")
+            version = 1
+
+        if version == 1:
+            training_columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(trainings)")
+            }
+            for name, definition in (
+                ("topics", "TEXT NOT NULL DEFAULT '[]'"),
+                ("generation_version", "INTEGER NOT NULL DEFAULT 1"),
+                ("scoring_version", "INTEGER NOT NULL DEFAULT 1"),
+                ("settings_fingerprint", "TEXT NOT NULL DEFAULT ''"),
+            ):
+                if name not in training_columns:
+                    connection.execute(f"ALTER TABLE trainings ADD COLUMN {name} {definition}")
+            attempt_columns = {row[1] for row in connection.execute("PRAGMA table_info(attempts)")}
+            for name, definition in (
+                ("topics", "TEXT NOT NULL DEFAULT '[]'"),
+                ("work_units", "INTEGER NOT NULL DEFAULT 0"),
+                ("strategy", "TEXT NOT NULL DEFAULT ''"),
+            ):
+                if name not in attempt_columns:
+                    connection.execute(f"ALTER TABLE attempts ADD COLUMN {name} {definition}")
+            connection.execute("PRAGMA user_version = 2")
 
     def save(self, training: CompletedTraining) -> int:
         with self._connect() as connection:
             cursor = connection.execute(
                 "INSERT INTO trainings (started_at, status, difficulty, seed, operations, "
                 "target_seconds, actual_seconds, stages, total_examples, correct_answers, "
-                "timeouts, average_response, strict_mode, cooldown_seconds, score, max_score) "
-                "VALUES (?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "timeouts, average_response, strict_mode, cooldown_seconds, score, max_score, "
+                "topics, generation_version, scoring_version, settings_fingerprint) "
+                "VALUES (?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     training.started_at,
                     training.difficulty.value,
@@ -120,15 +150,20 @@ class Stats:
                     training.cooldown_seconds,
                     float(training.score),
                     float(training.max_score),
+                    json.dumps([topic.value for topic in training.topics]),
+                    training.generation_version,
+                    training.scoring_version,
+                    training.settings_fingerprint,
                 ),
             )
             if cursor.lastrowid is None:
                 raise RuntimeError("SQLite did not return a training id")
             training_id = cursor.lastrowid
+            attempts_by_stage: dict[int, list[AnswerAttempt]] = {}
+            for attempt in training.attempts:
+                attempts_by_stage.setdefault(attempt.stage_number, []).append(attempt)
             for stage in training.stages:
-                stage_attempts = [
-                    item for item in training.attempts if item.stage_number == stage.number
-                ]
+                stage_attempts = attempts_by_stage.get(stage.number, [])
                 stage_cursor = connection.execute(
                     "INSERT INTO stages(training_id, number, kind, examples, duration) "
                     "VALUES (?, ?, ?, ?, ?)",
@@ -148,7 +183,8 @@ class Stats:
                     connection.execute(
                         "INSERT INTO attempts(stage_id, number, expression, correct_answer, "
                         "user_answer, is_correct, elapsed, timed_out, operation, operations, "
-                        "overtime, score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "overtime, score, topics, work_units, strategy) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
                             stage_id,
                             attempt.problem_number,
@@ -162,6 +198,9 @@ class Stats:
                             json.dumps([operation.value for operation in problem.operations]),
                             attempt.overtime_seconds,
                             float(attempt.score),
+                            json.dumps([topic.value for topic in problem.topics]),
+                            problem.work_units if problem.work_units is not None else 0,
+                            problem.strategy,
                         ),
                     )
             return training_id
@@ -180,27 +219,7 @@ class Stats:
                 "ORDER BY started_at DESC LIMIT ?",
                 (max(0, limit),),
             ).fetchall()
-        return [
-            TrainingRecord(
-                row["id"],
-                row["started_at"],
-                row["difficulty"],
-                row["stages"],
-                row["total_examples"],
-                row["correct_answers"],
-                row["correct_answers"] / row["total_examples"] if row["total_examples"] else 0.0,
-                row["average_response"],
-                row["timeouts"],
-                row["actual_seconds"],
-                row["target_seconds"],
-                tuple(json.loads(row["operations"])),
-                bool(row["strict_mode"]),
-                row["cooldown_seconds"],
-                row["score"],
-                row["max_score"],
-            )
-            for row in rows
-        ]
+        return [_training_record(row) for row in rows]
 
     def aggregate(self) -> AggregateStats:
         with self._connect() as connection:
@@ -215,7 +234,8 @@ class Stats:
                 "WHERE t.status = 'completed' AND a.timed_out = 0"
             ).fetchone()
             operation_rows = connection.execute(
-                "SELECT a.operations, a.is_correct FROM attempts a JOIN stages s ON s.id = a.stage_id "
+                "SELECT a.operations, a.topics, a.is_correct FROM attempts a "
+                "JOIN stages s ON s.id = a.stage_id "
                 "JOIN trainings t ON t.id = s.training_id WHERE t.status = 'completed'"
             ).fetchall()
             difficulty_rows = connection.execute(
@@ -225,9 +245,14 @@ class Stats:
             ).fetchall()
         accuracy = row["correct"] / row["examples"] if row["examples"] else 0.0
         operation_totals: dict[str, list[int]] = {}
+        topic_totals: dict[str, list[int]] = {}
         for item in operation_rows:
             for operation in json.loads(item["operations"]):
                 values = operation_totals.setdefault(operation, [0, 0])
+                values[0] += 1
+                values[1] += int(item["is_correct"])
+            for topic in json.loads(item["topics"]):
+                values = topic_totals.setdefault(topic, [0, 0])
                 values[0] += 1
                 values[1] += int(item["is_correct"])
         by_operation = {
@@ -236,6 +261,7 @@ class Stats:
         by_difficulty = {
             item["difficulty"]: (item["total"], item["correct"]) for item in difficulty_rows
         }
+        by_topic = {topic: (values[0], values[1]) for topic, values in topic_totals.items()}
         return AggregateStats(
             row["trainings"],
             row["examples"],
@@ -245,18 +271,57 @@ class Stats:
             row["timeouts"],
             by_operation,
             by_difficulty,
+            by_topic,
         )
 
     def comparable_history(
         self, training: CompletedTraining, limit: int = 2
     ) -> list[TrainingRecord]:
         operations = tuple(sorted(operation.value for operation in training.operations))
-        return [
-            row
-            for row in self.history(max(limit * 4, 10))
-            if tuple(sorted(row.operations)) == operations
-            and row.difficulty == training.difficulty.value
-            and row.stages == len(training.stages)
-            and row.strict == training.strict
-            and row.target_duration_seconds == training.duration_target_seconds
-        ][:limit]
+        if limit <= 0:
+            return []
+        topics = json.dumps([topic.value for topic in training.topics])
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM trainings WHERE status = 'completed' AND difficulty = ? "
+                "AND stages = ? AND strict_mode = ? AND target_seconds = ? AND topics = ? "
+                "AND generation_version = ? AND scoring_version = ? "
+                "AND settings_fingerprint = ? ORDER BY started_at DESC",
+                (
+                    training.difficulty.value,
+                    len(training.stages),
+                    int(training.strict),
+                    training.duration_target_seconds,
+                    topics,
+                    training.generation_version,
+                    training.scoring_version,
+                    training.settings_fingerprint,
+                ),
+            ).fetchall()
+        records = [_training_record(row) for row in rows]
+        return [row for row in records if tuple(sorted(row.operations)) == operations][:limit]
+
+
+def _training_record(row: sqlite3.Row) -> TrainingRecord:
+    return TrainingRecord(
+        row["id"],
+        row["started_at"],
+        row["difficulty"],
+        row["stages"],
+        row["total_examples"],
+        row["correct_answers"],
+        row["correct_answers"] / row["total_examples"] if row["total_examples"] else 0.0,
+        row["average_response"],
+        row["timeouts"],
+        row["actual_seconds"],
+        row["target_seconds"],
+        tuple(json.loads(row["operations"])),
+        bool(row["strict_mode"]),
+        row["cooldown_seconds"],
+        row["score"],
+        row["max_score"],
+        tuple(json.loads(row["topics"])),
+        row["generation_version"],
+        row["scoring_version"],
+        row["settings_fingerprint"],
+    )

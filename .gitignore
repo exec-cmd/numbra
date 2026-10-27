@@ -22,3 +22,9 @@ design.toml
 # Agent scratch space
 .superpowers/
 .worktrees/
+
+# Other
+.ruff-cache/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/

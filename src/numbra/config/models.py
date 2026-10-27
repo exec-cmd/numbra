@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..core.models import Difficulty, Operation, StageKind
+from ..core.models import Difficulty, Operation, StageKind, Topic
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,12 +35,15 @@ def _default_operations() -> tuple[Operation, ...]:
 
 def _default_profiles() -> dict[Difficulty, DifficultyConfig]:
     return {
-        Difficulty.VERY_EASY: DifficultyConfig(1, 10, 2, 2, 20),
-        Difficulty.EASY: DifficultyConfig(1, 20, 2, 2, 100),
+        Difficulty.EASY: DifficultyConfig(1, 20, 2, 2, 400),
         Difficulty.NORMAL: DifficultyConfig(2, 50, 2, 3, 500),
         Difficulty.HARD: DifficultyConfig(5, 150, 3, 4, 3_000),
         Difficulty.VERY_HARD: DifficultyConfig(10, 999, 3, 4, 10_000),
     }
+
+
+def _default_features() -> dict[Topic, bool]:
+    return {topic: False for topic in Topic}
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +52,7 @@ class ChallengeConfig:
     difficulty: Difficulty = Difficulty.NORMAL
     stages: int = 3
     seed: int | None = None
-    operations: tuple[Operation, ...] = field(default_factory=_default_operations)
+    operations: tuple[Operation | Topic, ...] = field(default_factory=_default_operations)
     stage_limits: dict[StageKind, float] = field(default_factory=_default_stage_limits)
     profiles: dict[Difficulty, DifficultyConfig] = field(default_factory=_default_profiles)
     operation_timing: OperationTimingConfig = field(
@@ -64,6 +67,7 @@ class ChallengeConfig:
             },
         )
     )
+    features: dict[Topic, bool] = field(default_factory=_default_features)
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,3 +75,4 @@ class Settings:
     challenge: ChallengeConfig
     templates: tuple[str, ...]
     styles: dict[str, str]
+    warnings: tuple[str, ...] = ()

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 
 from numbra.core.generator import (
@@ -6,7 +8,7 @@ from numbra.core.generator import (
     ProblemGenerator,
     canonical_problem_key,
 )
-from numbra.core.models import Operation, Problem
+from numbra.core.models import Difficulty, Operation, Problem
 from numbra.core.stages import StageKind, allocate_stage_kinds
 
 
@@ -46,6 +48,7 @@ def test_stage_distribution_is_exact_and_scales() -> None:
         StageKind.NORMAL,
         StageKind.FAST,
     )
+    assert len(allocate_stage_kinds(7)) == 7
 
 
 def test_generate_many_does_not_repeat_commutative_examples() -> None:
@@ -116,3 +119,41 @@ def test_custom_term_range_remains_usable_without_matching_weights() -> None:
     problems = ProblemGenerator(profile, (Operation.ADD,), 42).generate_many(1)
 
     assert len(problems[0].operations) == 3
+
+
+def test_small_pool_repeats_with_warning_and_determinism() -> None:
+    profile = DifficultyProfile(1, 10, 2, 2, 20)
+    first = ProblemGenerator(profile, (Operation.DIVIDE,), 42)
+    second = ProblemGenerator(profile, (Operation.DIVIDE,), 42)
+    batch = first.generate_many(20)
+    assert batch == second.generate_many(20)
+    assert first.warnings
+    assert len({canonical_problem_key(p) for p in batch[:8]}) == 8
+    assert all(a.expression != b.expression for a, b in zip(batch, batch[1:], strict=False))
+
+
+@pytest.mark.parametrize("seed", range(20))
+def test_shuffled_cycle_boundary_never_repeats_neighbor(seed: int) -> None:
+    generator = ProblemGenerator(
+        DifficultyProfile(1, 2, 2, 2, 100), (Operation.ADD,), seed, difficulty=Difficulty.EASY
+    )
+    batch = generator.generate_many(30)
+    assert all(
+        canonical_problem_key(a) != canonical_problem_key(b)
+        for a, b in zip(batch, batch[1:], strict=False)
+    )
+
+
+def test_small_pool_emits_one_cycle_warning() -> None:
+    generator = ProblemGenerator(
+        DifficultyProfile(1, 1, 2, 2, 2),
+        (Operation.ADD,),
+        seed=42,
+        difficulty=Difficulty.EASY,
+    )
+
+    problems = generator.generate_many(40)
+
+    assert len(problems) == 40
+    assert len(generator.warnings) == 1
+    assert len(set(generator.warnings)) == 1

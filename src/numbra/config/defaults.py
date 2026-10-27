@@ -4,6 +4,13 @@ difficulty = "normal"
 stages = 3
 operations = ["+", "-", "*", "/"]
 
+[features]
+sqrt = false
+trig = false
+log = false
+power = false
+identities = false
+
 [timing]
 operation_bonus_enabled = true
 [timing.operation_bonus_seconds]
@@ -19,18 +26,12 @@ limit_seconds = 10
 [stages.slow]
 limit_seconds = 15
 
-[difficulties.very-easy]
-min_value = 1
-max_value = 10
-min_terms = 2
-max_terms = 2
-max_result = 20
 [difficulties.easy]
 min_value = 1
 max_value = 20
 min_terms = 2
 max_terms = 2
-max_result = 100
+max_result = 400
 [difficulties.normal]
 min_value = 2
 max_value = 50

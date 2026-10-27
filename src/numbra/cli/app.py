@@ -14,7 +14,7 @@ from rich.table import Table
 from .._version import __version__
 from ..config import ConfigError, ConfigManager, default_database_path, default_log_path
 from ..core.challenge import Challenge, ChallengeOptions, TrainingSession, grade_for_score
-from ..core.models import Difficulty, Operation, StageKind
+from ..core.models import Difficulty, Operation, StageKind, Topic, parse_operation_selection
 from ..core.stats import Stats
 from .input import cooldown, timed_prompt
 from .logging import configure_logging
@@ -29,16 +29,13 @@ app = typer.Typer(
 )
 
 
-def _parse_operations(value: str | None) -> tuple[Operation, ...] | None:
+def _parse_operations(value: str | None) -> tuple[Operation | Topic, ...] | None:
     if value is None:
         return None
     parts = tuple(item.strip() for item in value.split(",") if item.strip())
     if not parts:
         raise ValueError("operation list must not be empty")
-    try:
-        return tuple(Operation(item) for item in parts)
-    except ValueError as exc:
-        raise ValueError(f"unsupported operation; use +,-,*,/,^ ({exc})") from exc
+    return parse_operation_selection(parts)
 
 
 @app.callback()
@@ -52,7 +49,7 @@ def callback(
         raise typer.Exit()
 
 
-@app.command()
+@app.command(help="Answers may be integers or fractions, for example 3/4.")
 def challenge(
     duration: Annotated[
         int | None, typer.Option("-t", "--duration", help="Target duration in minutes.", min=1)
@@ -62,7 +59,12 @@ def challenge(
     ] = None,
     seed: Annotated[int | None, typer.Option("-S", "--seed", help="Integer seed.")] = None,
     operations: Annotated[
-        str | None, typer.Option("-o", "--operations", help="Comma-separated operations.")
+        str | None,
+        typer.Option(
+            "-o",
+            "--operations",
+            help="Comma-separated: +, -, *, /, sqrt, trig, log, power (^ alias).",
+        ),
     ] = None,
     stages: Annotated[
         int | None, typer.Option("-n", "--stages", help="Number of stages.", min=1)
@@ -79,25 +81,40 @@ def challenge(
             max=3.0,
         ),
     ] = 2.0,
+    advanced: Annotated[
+        bool | None,
+        typer.Option(
+            "--advanced/--no-advanced",
+            help="Enable all basic operations, advanced topics and identities.",
+        ),
+    ] = None,
+    identities: Annotated[
+        bool | None,
+        typer.Option("--identities/--no-identities", help="Enable identity problems."),
+    ] = None,
 ) -> None:
     try:
         selected_operations = _parse_operations(operations)
         settings = ConfigManager().load_or_create()
         session: TrainingSession = Challenge(settings).create_session(
             ChallengeOptions(
-                duration,
-                difficulty,
-                seed,
-                selected_operations,
-                stages,
-                strict,
-                cooldown_seconds,
+                duration_minutes=duration,
+                difficulty=difficulty,
+                seed=seed,
+                operations=selected_operations,
+                stages=stages,
+                strict=strict,
+                cooldown_seconds=cooldown_seconds,
+                advanced=advanced,
+                identities=identities,
             )
         )
     except (ConfigError, ValueError) as exc:
         logger.error("Unable to start challenge: %s", exc)
         console.print(f"[red]Configuration error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
+    for warning in (*settings.warnings, *session.warnings):
+        console.print(f"[yellow]Warning:[/yellow] {warning}")
     kinds = ", ".join(
         f"{kind.value}: {sum(stage.kind is kind for stage in session.stages)}" for kind in StageKind
     )
@@ -106,13 +123,19 @@ def challenge(
     success_style = styles.get("success", "green")
     error_style = styles.get("error", "bold red")
     timer_style = styles.get("timer", "yellow")
+    displayed_operations = ", ".join(
+        (
+            *session.operations,
+            *(topic.value for topic in session.topics if topic is not Topic.IDENTITIES),
+        )
+    )
     console.print(
         Panel.fit(
             f"[bold]Difficulty:[/bold] {session.difficulty.value}\n"
             f"[bold]Stages:[/bold] {len(session.stages)} · [bold]Examples:[/bold] {session.total_examples}\n"
             f"[bold]Mode:[/bold] {'strict' if session.strict else 'soft'} · "
             f"[bold]Cooldown:[/bold] {session.cooldown_seconds:g}s\n"
-            f"[bold]Operations:[/bold] {', '.join(session.operations)} · [bold]Seed:[/bold] {session.seed}",
+            f"[bold]Operations:[/bold] {displayed_operations} · [bold]Seed:[/bold] {session.seed}",
             title="Numbra challenge",
             border_style=accent_style,
         )
@@ -162,7 +185,7 @@ def challenge(
     logger.info("Challenge %s saved with %s attempts", training_id, len(completed.attempts))
     console.print(
         f"\n[bold]Result:[/bold] {completed.correct_answers}/{completed.total_examples} correct "
-        f"({completed.accuracy:.1%}), score {completed.score:.2f}/{completed.max_score:.0f} "
+        f"({completed.accuracy:.1%}), score {completed.score:.2f}/{completed.max_score:.2f} "
         f"({completed.score_percent:.1%}), grade {completed.grade}, level {completed.grade}"
     )
     console.print(
@@ -178,11 +201,16 @@ def challenge(
                 f"{sum(item.timed_out for item in kind_attempts)} timeouts"
             )
     operation_totals: dict[Operation, list[int]] = {}
+    topic_totals: dict[Topic, list[int]] = {}
     for attempt in completed.attempts:
         stage = completed.stages[attempt.stage_number - 1]
         problem = stage.problems[attempt.problem_number - 1]
         for operation in problem.operations:
             totals = operation_totals.setdefault(operation, [0, 0])
+            totals[0] += 1
+            totals[1] += int(attempt.is_correct)
+        for topic in problem.topics:
+            totals = topic_totals.setdefault(topic, [0, 0])
             totals[0] += 1
             totals[1] += int(attempt.is_correct)
     if operation_totals:
@@ -193,6 +221,14 @@ def challenge(
                 for operation, values in sorted(
                     operation_totals.items(), key=lambda item: item[0].value
                 )
+            )
+        )
+    if topic_totals:
+        console.print(
+            "Topics: "
+            + ", ".join(
+                f"{topic.value} {values[1]}/{values[0]}"
+                for topic, values in sorted(topic_totals.items(), key=lambda item: item[0].value)
             )
         )
     if previous:
@@ -282,6 +318,14 @@ def results(
             + ", ".join(
                 f"{op} {correct}/{total}"
                 for op, (total, correct) in sorted(aggregate.by_operation.items())
+            )
+        )
+    if aggregate.by_topic:
+        console.print(
+            "Topics: "
+            + ", ".join(
+                f"{topic} {correct}/{total}"
+                for topic, (total, correct) in sorted(aggregate.by_topic.items())
             )
         )
     if aggregate.by_difficulty:

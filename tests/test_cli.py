@@ -4,6 +4,7 @@ import re
 import sys
 from types import SimpleNamespace
 
+import pytest
 from typer.testing import CliRunner
 
 from numbra.cli import app
@@ -27,15 +28,18 @@ def test_invalid_operations_are_reported() -> None:
     assert "unsupported operation" in result.stdout
 
 
-def test_results_empty_database_is_clear(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+def test_very_easy_is_not_a_cli_difficulty() -> None:
+    result = runner.invoke(app, ["challenge", "--difficulty", "very-easy"])
+    assert result.exit_code == 2
+
+
+def test_results_empty_database_is_clear() -> None:
     result = runner.invoke(app, ["results", "--limit", "10"])
     assert result.exit_code == 0
     assert "No completed challenges" in result.stdout
 
 
-def test_results_reset_requires_confirmation(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+def test_results_reset_requires_confirmation() -> None:
     result = runner.invoke(app, ["results", "--reset"], input="n\n")
     assert result.exit_code == 0
     assert "cancelled" in result.stdout.lower()
@@ -49,6 +53,32 @@ def test_short_flags_are_documented() -> None:
     assert "-n" in plain_help
     assert "--strict" in plain_help
     assert "--cooldown" in plain_help
+    for flag in ("--advanced", "--identities"):
+        assert flag in plain_help
+    for topic in ("sqrt", "trig", "log", "power"):
+        assert topic in plain_help
+    assert "fraction" in plain_help.lower()
+
+
+def test_operation_selection_and_remaining_flags_are_passed(monkeypatch) -> None:
+    from numbra.core.challenge import Challenge
+
+    captured = {}
+
+    def capture_options(self, options):
+        captured["options"] = options
+        raise ValueError("stop after capturing options")
+
+    monkeypatch.setattr(Challenge, "create_session", capture_options)
+    result = runner.invoke(app, ["challenge", "-o", "sqrt,trig", "--no-identities", "--advanced"])
+
+    assert result.exit_code == 2
+    options = captured["options"]
+    assert options.advanced is True
+    from numbra.core.models import Topic
+
+    assert options.operations == (Topic.SQRT, Topic.TRIG)
+    assert options.identities is False
 
 
 def test_timed_prompt_returns_none_after_timeout(monkeypatch) -> None:
@@ -89,9 +119,19 @@ def test_cooldown_uses_injected_sleeper() -> None:
     assert calls == [2.0]
 
 
-def test_challenge_prints_score_and_grade(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+@pytest.mark.parametrize("selection", ["+,sqrt", "sqrt"])
+def test_challenge_prints_score_and_grade(monkeypatch, selection) -> None:
+    from numbra.config import ConfigManager
+
+    manager = ConfigManager()
+    manager.load_or_create()
+    settings_path = manager.paths.main
+    settings_path.write_text(
+        settings_path.read_text(encoding="utf-8").replace(
+            'difficulty = "normal"', 'difficulty = "very-easy"'
+        ),
+        encoding="utf-8",
+    )
     cli_module = importlib.import_module("numbra.cli.app")
 
     async def fake_prompt(*args, **kwargs):
@@ -112,7 +152,7 @@ def test_challenge_prints_score_and_grade(monkeypatch, tmp_path) -> None:
             "--stages",
             "1",
             "--operations",
-            "+",
+            selection,
             "--cooldown",
             "1",
         ],
@@ -120,4 +160,10 @@ def test_challenge_prints_score_and_grade(monkeypatch, tmp_path) -> None:
 
     assert result.exit_code == 0
     assert "score" in result.stdout
+    assert re.search(r"score \d+\.\d{2}/\d+\.\d{2}", result.stdout)
     assert "grade" in result.stdout
+    assert "Topics: sqrt" in result.stdout
+    plain_output = re.sub(r"\s+", " ", result.stdout)
+    expected_operations = ", ".join(selection.split(","))
+    assert f"Operations: {expected_operations}" in plain_output
+    assert "Warning:" in plain_output and "using 'easy'" in plain_output

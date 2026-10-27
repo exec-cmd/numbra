@@ -11,6 +11,9 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      XDG_CONFIG_HOME: ${{ runner.temp }}/numbra-release-config
+      XDG_DATA_HOME: ${{ runner.temp }}/numbra-release-data
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,8 +39,10 @@ jobs:
         run: |
           python -m venv /tmp/numbra-release-clean
           /tmp/numbra-release-clean/bin/python -m pip install --quiet dist/*.whl
+          /tmp/numbra-release-clean/bin/numbra --help
           /tmp/numbra-release-clean/bin/numbra --version
           /tmp/numbra-release-clean/bin/numbra challenge --help
+          /tmp/numbra-release-clean/bin/numbra results --limit 1
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
