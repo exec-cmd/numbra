@@ -10,8 +10,10 @@ Numbra is a Python 3.13+ terminal application for mental-arithmetic practice. It
 
 - `src/numbra/cli/`: Typer commands, terminal rendering, interactive input, logging.
 - `src/numbra/config/`: platform paths, default configuration, parsing, validation, public exports.
-- `src/numbra/core/models.py`: arithmetic operations, expressions, and evaluation.
-- `src/numbra/core/generator.py`: seeded exercise generation, constraints, operation balance, complexity ordering.
+- `src/numbra/core/models.py`: operation/topic enums and problem metadata.
+- `src/numbra/core/expressions.py`: expression trees, exact evaluation, and work units.
+- `src/numbra/core/catalog.py`: finite arithmetic and topic catalogs.
+- `src/numbra/core/generator.py`: seeded exercise selection, constraints, and operation balance.
 - `src/numbra/core/stages.py`: stage allocation and stage-kind rotation.
 - `src/numbra/core/challenge.py`: session planning, timing, scoring, and grades.
 - `src/numbra/core/stats.py` and `src/numbra/core/db/schema.py`: SQLite persistence and schema migration.

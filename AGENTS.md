@@ -44,11 +44,11 @@ Run checks in proportion to the change. Start with the closest tests while itera
 
 Treat these as contracts unless the task explicitly changes them:
 
-- A seed reproduces the generated exercise sequence. Exercises are unique within one training, and selected operations are balanced across a generated batch.
-- Arithmetic uses integer results and standard operator precedence. Division is exact, non-zero, and never divides a value by itself. Negative intermediate values and answers are allowed.
-- Powers use `^`, are limited to exponents 2 and 3 by generation, and are available only for `hard` and `very-hard` when explicitly selected.
-- Difficulty comes from transparent static profiles. Do not introduce history-adaptive generation implicitly. Respect operand, term-count, and `max_result` limits.
-- Stage kinds cycle through `fast`, `normal`, and `slow`. They change timing, not generator difficulty.
+- A seed reproduces the generated exercise sequence. Exercises remain unique until their finite family catalog is exhausted; subsequent repeats produce a warning. Selected operations are balanced across a generated batch.
+- Arithmetic uses exact rational evaluation and standard operator precedence. Basic arithmetic division is exact, non-zero, and never divides a value by itself. Advanced topics may produce fractions; generated intermediate denominators are at most 12. Negative intermediate values and answers are allowed.
+- Powers use `^`, are limited to exponents 2 and 3 by generation, and are enabled through `power` (`^` alias), feature configuration, or `--advanced` at any difficulty. Square roots, trigonometry, logarithms, powers, and identities default to off; identities have a separate CLI toggle.
+- Difficulty comes from transparent static profiles and work-unit bands: easy 1–2, normal 2–5, hard 4–8, very-hard 6–12. Do not introduce history-adaptive generation implicitly. Respect operand, term-count, and `max_result` limits.
+- Stage kinds cycle through `slow`, `normal`, and `fast`. They change timing, not generator difficulty.
 - Soft mode keeps input open after the limit. A correct answer receives a linear time factor that reaches zero at twice the limit. Strict mode ends the attempt at the limit.
 - Maximum problem score is complexity-calibrated: `1 + 0.2 * max(0, complexity_score - 3)`. Grades use the existing S/A/B/C/D thresholds.
 - Cooldown defaults to two seconds and accepts values from one through three seconds.

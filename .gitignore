@@ -23,7 +23,7 @@ design.toml
 .superpowers/
 .worktrees/
 
-# Other
+# Tool caches
 .ruff-cache/
 .ruff_cache/
 .pytest_cache/

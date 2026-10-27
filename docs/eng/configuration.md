@@ -31,4 +31,4 @@ On Linux, the folders normally live under `~/.config/numbra` and `~/.local/share
 
 Challenge length and stage count must be at least one. Cooldown accepts one to three seconds. Difficulty profiles limit operand sizes and results. Advanced topics use finite sets of exact values, so not every mathematically possible expression is available. A challenge that cannot fit every selected topic reports the minimum duration needed.
 
-Numbra reports invalid configuration with the affected filename or setting. Existing settings are not rewritten automatically when the application is updated. The optional `temps.json` and `design.toml` files are created alongside `numbra.toml`; they are not needed to start a challenge.
+Numbra reports invalid configuration with the affected filename or setting. Existing settings are not rewritten automatically when the application is updated. `temps.json` and `design.toml` are created alongside `numbra.toml` and validated on challenge startup; their defaults need no manual editing. Integer settings require TOML integers, and operations require an array of strings. Booleans and numeric strings are not accepted as numbers.
