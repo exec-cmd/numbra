@@ -53,10 +53,12 @@ class PersonalRecord:
 
 
 # Completed trainings with the mean time of their correct answers (NULL when none).
+# One grouped pass over attempts; a correlated subquery rescans them per training.
 _COMPLETED = (
-    "SELECT t.*, (SELECT AVG(a.elapsed) FROM attempts a JOIN stages s ON s.id = a.stage_id "
-    "WHERE s.training_id = t.id AND a.is_correct = 1) AS average_correct "
-    "FROM trainings t WHERE t.status = 'completed' "
+    "SELECT t.*, c.average_correct FROM trainings t LEFT JOIN ("
+    "SELECT s.training_id, AVG(a.elapsed) AS average_correct FROM attempts a "
+    "JOIN stages s ON s.id = a.stage_id WHERE a.is_correct = 1 GROUP BY s.training_id"
+    ") c ON c.training_id = t.id WHERE t.status = 'completed' "
 )
 
 

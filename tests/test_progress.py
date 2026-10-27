@@ -136,3 +136,42 @@ def test_streak_uses_local_midnight(tmp_path: Path) -> None:
 
 def test_streak_of_empty_history(tmp_path: Path) -> None:
     assert Stats(tmp_path / "empty.sqlite3").streak(date(2026, 10, 27)) == (0, 0)
+
+
+def _query_steps(stats: Stats) -> int:
+    """SQLite VM steps for the record queries, a deterministic cost measure."""
+    import sqlite3
+
+    steps = 0
+    connect = sqlite3.connect
+
+    def counting_connect(*args, **kwargs):
+        connection = connect(*args, **kwargs)
+
+        def tick() -> int:
+            nonlocal steps
+            steps += 1
+            return 0
+
+        connection.set_progress_handler(tick, 1)
+        return connection
+
+    sqlite3.connect = counting_connect
+    try:
+        stats.records()
+        stats.history(10_000)
+    finally:
+        sqlite3.connect = connect
+    return steps
+
+
+def test_record_queries_scale_linearly_with_history(tmp_path: Path) -> None:
+    answers = tuple((True, 2.0) for _ in range(10))
+    small = Stats(tmp_path / "small.sqlite3")
+    large = Stats(tmp_path / "large.sqlite3")
+    for i in range(60):
+        small.save(_training(answers, started_at=float(i)))
+    for i in range(120):
+        large.save(_training(answers, started_at=float(i)))
+
+    assert _query_steps(large) < 3 * _query_steps(small)
