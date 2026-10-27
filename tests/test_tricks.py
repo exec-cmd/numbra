@@ -140,3 +140,30 @@ def test_tricks_seed_reproduces() -> None:
 def test_trick_examples_are_correct(trick) -> None:
     parts = [part.strip() for part in trick.example.split("=")]
     assert parse_expression(parts[0]).evaluate() == int(parts[-1])
+
+
+@pytest.mark.parametrize(
+    ("expression", "strategy", "units"),
+    [
+        ("88 * 89", "near-100", 5),
+        ("88 * 95", "near-100", 5),
+        ("41 * 41", "square-near-50", 4),
+        ("25 * 25", "square-ending-5", 2),
+        ("21 * 29", "same-decade", 3),
+    ],
+)
+def test_specific_tricks_keep_their_problems(expression: str, strategy: str, units: int) -> None:
+    test_trick_units_match_table(expression, strategy, units)
+
+
+def test_advanced_keeps_tricks_from_configured_operations() -> None:
+    from numbra.config.models import ChallengeConfig, Settings
+    from numbra.core.challenge import Challenge, ChallengeOptions
+    from numbra.core.models import Operation
+
+    config = ChallengeConfig(operations=(Operation.ADD, Topic.TRICKS))
+    for advanced in (True, False):
+        session = Challenge(Settings(config, (), {})).create_session(
+            ChallengeOptions(seed=1, advanced=advanced)
+        )
+        assert Topic.TRICKS in session.topics

@@ -289,7 +289,9 @@ class Challenge:
         if options.advanced is not None:
             # Tricks are chosen only explicitly (-o tricks or [features]), never by --advanced.
             features = {
-                topic: options.advanced if topic is not Topic.TRICKS else features.get(topic, False)
+                topic: options.advanced
+                if topic is not Topic.TRICKS
+                else features.get(topic, False) or topic in selected_topics
                 for topic in Topic
             }
             if options.advanced:
