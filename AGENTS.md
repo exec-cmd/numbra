@@ -12,8 +12,17 @@ Read the relevant implementation and tests before changing behavior. Prefer the 
 - `src/numbra/config/` owns platform paths, default files, parsing, validation, and public config exports.
 - `src/numbra/core/` owns arithmetic models, generation (`catalog.py`, `tricks.py`, `generator.py`), stage allocation, sessions, scoring, and statistics. Keep this package independent of Typer and Rich.
 - `src/numbra/core/db/schema.py` defines the SQLite schema. `Stats._migrate()` handles existing databases.
-- `tests/` contains CLI, configuration, generator, generation-quality, progress, session/statistics, and product-rule coverage; `docs/develop/human/development.md` maps each test file.
-- `README.md` and `README_RU.md` are short landing pages in English and Russian. User-visible detail lives in `docs/eng/` and `docs/rus/` (`usage.md`, `training.md`, `configuration.md`), kept in sync; contributor docs live in `docs/develop/human/` (English).
+- `tests/` contains CLI, configuration, generator, generation-quality, progress, session/statistics, and product-rule coverage.
+- `README.md` and `README_RU.md` are short landing pages with the same structure; change both together. User-visible detail lives in `docs/eng/` (`usage.md`, `training.md`, `configuration.md`).
+
+## Agent reference
+
+Open the file when its trigger fires; skip it otherwise.
+
+- Generator, catalogs, tricks, expressions, version stamps: `docs/develop/generation.md`
+- Operation/topic selection, `numbra.toml` parsing, defaults, platform paths: `docs/develop/selection-and-config.md`
+- Stats, schema, migrations, history, records, streak, recommendation: `docs/develop/persistence.md`
+- A command fails to start, a new import in `core`, or choosing which tests and docs a change touches: `docs/develop/workflow.md`
 
 ## Development commands
 
@@ -57,7 +66,7 @@ Treat these as contracts unless the task explicitly changes them:
 - Cancelling a challenge does not save a partial session. Only completed training is persisted.
 - Progress groups (records, recommendation) match difficulty, strict mode, operations, and topics, and ignore duration, stage count, and generator/scoring versions. `Previous comparable` stays an exact match. A day streak counts local dates with a completed training and survives until the end of the next day. The recommendation never suggests a level above `hard`.
 
-When changing one of these rules, update the implementation, focused tests, CLI help where applicable, and the matching pages in both `docs/eng/` and `docs/rus/` (plus the READMEs when the landing summary changes) in the same change.
+When changing one of these rules, update the implementation, focused tests, CLI help where applicable, and the matching pages in `docs/eng/` (plus both READMEs when the landing summary changes) in the same change.
 
 ## Configuration and persistence
 
@@ -79,6 +88,6 @@ Do not weaken assertions merely to make a failing test pass. Diagnose whether th
 
 ## Documentation and delivery
 
-Keep commands, accepted flags, defaults, paths, and behavior in the READMEs and both user-guide languages synchronized with the code. Use concise factual prose and avoid documenting planned behavior as implemented.
+Keep commands, accepted flags, defaults, paths, and behavior in both READMEs and `docs/eng/` synchronized with the code. Use concise factual prose and avoid documenting planned behavior as implemented.
 
 Before editing, inspect `git status`, `git diff`, and `git diff --cached`. Preserve unrelated user changes and report exactly which files were changed and which checks ran. Do not commit, tag, push, publish a release, reset history, or delete user data unless the user explicitly requests it.

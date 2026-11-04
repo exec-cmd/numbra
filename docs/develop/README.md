@@ -1,6 +1,8 @@
-# Development documentation
+# Agent reference
 
-Technical documentation is written in English and intended for contributors and coding agents.
+Disclosed reference for coding agents. `AGENTS.md` holds the rules and the pointers that say when to open each file here; read a file only when its pointer fires.
 
-- [Contributor guide](human/README.md) — development workflow, architecture, and configuration reference.
-- [`AGENTS.md`](../../AGENTS.md) — repository instructions and product invariants for code changes; coding agents start there. `CLAUDE.md` imports it.
+- [generation.md](generation.md)
+- [selection-and-config.md](selection-and-config.md)
+- [persistence.md](persistence.md)
+- [workflow.md](workflow.md)
