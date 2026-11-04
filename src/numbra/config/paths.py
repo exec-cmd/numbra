@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import os
-import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from platformdirs import user_config_path, user_data_path
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,21 +22,12 @@ class ConfigPaths:
 
 
 def default_config_paths() -> ConfigPaths:
-    if sys.platform == "win32":
-        base = Path(os.environ.get("APPDATA", str(Path.home() / "AppData/Roaming"))) / "numbra"
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library/Application Support/numbra"
-    else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "numbra"
-    return ConfigPaths.from_root(base)
+    # roaming=True keeps Windows on %APPDATA%; appauthor=False avoids a doubled folder there.
+    return ConfigPaths.from_root(user_config_path("numbra", appauthor=False, roaming=True))
 
 
 def default_data_dir() -> Path:
-    if sys.platform == "win32":
-        return Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData/Local"))) / "numbra"
-    if sys.platform == "darwin":
-        return Path.home() / "Library/Application Support/numbra"
-    return Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "numbra"
+    return user_data_path("numbra", appauthor=False)
 
 
 def default_database_path() -> Path:
