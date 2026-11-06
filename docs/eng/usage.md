@@ -2,13 +2,15 @@
 
 ## Interactive mode
 
-Run `numbra` with no arguments in a terminal to open the interactive interface. The menu offers **Train**, **Results** and **Tricks**; `q` or **Quit** exits. Train walks through a setup form (difficulty, duration, stages, operations and topics, strict mode, seed), then the timed run, then the summary. The form starts from your saved settings. Without a terminal, for example when output is piped, `numbra` prints the help text instead. Every command in this page works the same way.
+Run `numbra` with no arguments in a terminal to open the interactive interface. The menu offers **Train**, **Results**, **Settings** and **Tricks**; `q` or **Quit** exits. Train walks through a setup form (difficulty, duration, stages, operations and topics, strict mode, seed), then the timed run, then the summary. The form starts from your saved settings. Without a terminal, for example when output is piped, `numbra` prints the help text instead. Every command in this page works the same way.
 
 Keys during a training:
 
 - `Enter` submits the answer. After the cooldown the next example appears.
 - `Esc` pressed twice cancels the training. Nothing is saved.
-- In the summary, `Enter` or `Esc` returns to the menu. The setup form and Tricks screen close with `Esc`.
+- In the summary, `Enter` or `Esc` returns to the menu. The setup form, Settings and Tricks screens close with `Esc`.
+
+Settings lists every key of `numbra.toml` with its effective value, and the file path at the top. `Enter` on a row opens an edit line holding the value as a TOML literal, such as `hard`, `42` or `["+", "-"]`. `Enter` saves it. A value the file would reject stays on screen with the error, and nothing is written until it is fixed or `Esc` cancels the edit. `d` or `Delete` removes the key, so the built-in default applies again. Each change is written to `numbra.toml` at once, and the next Train setup uses it.
 - `Ctrl+Q` quits from any screen. An unfinished training is not saved.
 
 The Results screen shows the same saved data as `numbra results`, on tabs:

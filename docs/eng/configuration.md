@@ -23,7 +23,7 @@ Leave out `seed` to get a new random sequence each time. Set an integer seed whe
 
 ## Change settings from the command line
 
-`numbra config` reads and changes `numbra.toml` without a text editor:
+`numbra config` reads and changes `numbra.toml` without a text editor. The **Settings** screen of the interactive interface makes the same changes (see [Usage](usage.md#interactive-mode)):
 
 ```bash
 numbra config list                             # every setting with its effective value

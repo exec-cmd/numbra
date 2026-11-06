@@ -14,8 +14,15 @@ from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList
 
-from ..config import ConfigManager, Settings, default_database_path
+from ..config import (
+    ConfigManager,
+    ConfigPaths,
+    Settings,
+    default_config_paths,
+    default_database_path,
+)
 from .results import ResultsScreen
+from .settings import SettingsScreen
 from .train import TrainSetupScreen
 from .tricks import TricksScreen
 
@@ -23,6 +30,7 @@ from .tricks import TricksScreen
 MENU: tuple[tuple[str, str, Callable[[], Screen[None]] | None], ...] = (
     ("train", "Train", TrainSetupScreen),
     ("results", "Results", ResultsScreen),
+    ("settings", "Settings", SettingsScreen),
     ("tricks", "Tricks", TricksScreen),
     ("quit", "Quit", None),
 )
@@ -58,13 +66,17 @@ class NumbraApp(App[None]):
         self,
         *,
         settings_loader: Callable[[], Settings] | None = None,
+        config_paths: ConfigPaths | None = None,
         database_path: Path | None = None,
         today: Callable[[], date] = date.today,
         clock: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], Awaitable[object]] = asyncio.sleep,
     ) -> None:
         super().__init__()
-        self._settings_loader = settings_loader or (lambda: ConfigManager().load_or_create())
+        self.config_paths = config_paths or default_config_paths()
+        self._settings_loader = settings_loader or (
+            lambda: ConfigManager(self.config_paths).load_or_create()
+        )
         self.database_path = database_path or default_database_path()
         self.today = today
         self.clock = clock

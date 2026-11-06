@@ -13,17 +13,18 @@ from types import SimpleNamespace
 from typing import Any
 
 from textual.pilot import Pilot
-from textual.widgets import Button, DataTable, Input, OptionList, Sparkline, Static, Switch
+from textual.widgets import Button, DataTable, Input, OptionList, Select, Sparkline, Static, Switch
 from typer.testing import CliRunner
 
 import numbra.tui
-from numbra.config import ConfigError, ConfigManager, ConfigPaths, Settings
+from numbra.config import ConfigError, ConfigManager, ConfigPaths, Settings, get_value, set_value
 from numbra.core.challenge import Challenge, ChallengeOptions
 from numbra.core.models import Difficulty, Operation
 from numbra.core.stats import Stats
 from numbra.core.tricks import TRICKS
 from numbra.tui.app import MENU, MenuScreen, NumbraApp
 from numbra.tui.results import ResultsScreen, SessionScreen
+from numbra.tui.settings import SettingsScreen
 from numbra.tui.train import SummaryScreen, TrainingScreen, TrainSetupScreen
 from numbra.tui.tricks import TricksScreen
 
@@ -63,6 +64,7 @@ def make_app(
 ) -> NumbraApp:
     return NumbraApp(
         settings_loader=lambda: settings,
+        config_paths=ConfigPaths.from_root(tmp_path / "config"),
         database_path=tmp_path / "numbra.sqlite3",
         today=lambda: date(2026, 11, 6),
         clock=clock,
@@ -103,7 +105,7 @@ def test_menu_lists_every_entry(tmp_path: Path) -> None:
             menu = app.screen.query_one(OptionList)
             labels = [str(menu.get_option_at_index(i).prompt) for i in range(menu.option_count)]
             assert labels == [label for _, label, _ in MENU]
-            assert labels == ["Train", "Results", "Tricks", "Quit"]
+            assert labels == ["Train", "Results", "Settings", "Tricks", "Quit"]
 
     asyncio.run(scenario())
 
@@ -248,7 +250,7 @@ def test_tricks_screen_lists_every_trick(tmp_path: Path) -> None:
         app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
         async with app.run_test() as pilot:
             await pilot.pause()
-            app.screen.query_one(OptionList).highlighted = 2
+            app.screen.query_one(OptionList).highlighted = 3  # Menu: Tricks
             await pilot.press("enter")
             await wait_until(pilot, lambda: isinstance(app.screen, TricksScreen))
             table = app.screen.query_one(DataTable)
@@ -293,6 +295,37 @@ def test_results_without_sessions_shows_the_empty_message(tmp_path: Path) -> Non
             )
             assert not results.query_one("#tabs").display
 
+
+async def open_settings(pilot: Pilot[Any], app: NumbraApp) -> SettingsScreen:
+    await pilot.pause()
+    app.screen.query_one(OptionList).highlighted = 2  # Menu: Settings
+    await pilot.press("enter")
+    await wait_until(pilot, lambda: isinstance(app.screen, SettingsScreen))
+    screen = app.screen
+    assert isinstance(screen, SettingsScreen)
+    return screen
+
+
+async def edit_difficulty(pilot: Pilot[Any], screen: SettingsScreen, text: str) -> None:
+    table = screen.query_one(DataTable)
+    table.move_cursor(row=table.get_row_index("challenge.difficulty"))
+    await pilot.press("enter")
+    await wait_until(pilot, lambda: screen.query_one(Input).display)
+    screen.query_one(Input).value = ""
+    await pilot.press(*text)
+    await pilot.press("enter")
+
+
+def test_settings_table_lists_effective_values(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            screen = await open_settings(pilot, app)
+            table = screen.query_one(DataTable)
+            keys = [row.key.value for row in table.ordered_rows]
+            assert "challenge.difficulty" in keys
+            assert table.get_row("challenge.difficulty")[1] == '"normal"'
+
     asyncio.run(scenario())
 
 
@@ -310,6 +343,40 @@ def test_results_history_opens_a_session_and_escape_returns(tmp_path: Path) -> N
             await wait_until(pilot, lambda: isinstance(app.screen, ResultsScreen))
             await pilot.press("escape")
             await wait_until(pilot, lambda: isinstance(app.screen, MenuScreen))
+
+
+def test_settings_edit_saves_and_refreshes(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        paths = ConfigPaths.from_root(tmp_path / "config")
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            screen = await open_settings(pilot, app)
+            await edit_difficulty(pilot, screen, "hard")
+            await wait_until(pilot, lambda: not screen.query_one(Input).display)
+            assert get_value(paths, "challenge.difficulty") == "hard"
+            assert screen.query_one(DataTable).get_row("challenge.difficulty")[1] == '"hard"'
+
+    asyncio.run(scenario())
+
+
+def test_settings_invalid_value_is_shown_and_nothing_is_written(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        paths = ConfigPaths.from_root(tmp_path / "config")
+        settings = make_settings(tmp_path)  # creates numbra.toml
+        before = paths.main.read_bytes()
+        app = make_app(tmp_path, settings, FakeClock())
+        async with app.run_test() as pilot:
+            screen = await open_settings(pilot, app)
+            await edit_difficulty(pilot, screen, "bogus")
+            await wait_until(pilot, lambda: plain_text(screen.query_one("#error", Static)) != "")
+            assert "challenge.difficulty" in plain_text(screen.query_one("#error", Static))
+            assert screen.query_one(Input).display
+            await pilot.press("escape")
+            await wait_until(pilot, lambda: not screen.query_one(Input).display)
+            assert isinstance(app.screen, SettingsScreen)
+            await pilot.press("escape")
+            await wait_until(pilot, lambda: isinstance(app.screen, MenuScreen))
+        assert paths.main.read_bytes() == before
 
     asyncio.run(scenario())
 
@@ -329,6 +396,25 @@ def test_results_tabs_show_saved_statistics(tmp_path: Path) -> None:
             assert not results.query_one("#trend", Sparkline).display
             assert results.query_one("#trend-hint").display
 
+
+def test_settings_reset_restores_the_default(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        paths = ConfigPaths.from_root(tmp_path / "config")
+        set_value(paths, "challenge.difficulty", "hard")
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            screen = await open_settings(pilot, app)
+            table = screen.query_one(DataTable)
+            table.move_cursor(row=table.get_row_index("challenge.difficulty"))
+            await pilot.press("d")
+            await wait_until(
+                pilot,
+                lambda: (
+                    screen.query_one(DataTable).get_row("challenge.difficulty")[1] == '"normal"'
+                ),
+            )
+        assert get_value(paths, "challenge.difficulty") == "normal"
+
     asyncio.run(scenario())
 
 
@@ -342,6 +428,40 @@ def test_results_reload_shows_sessions_saved_while_open(tmp_path: Path) -> None:
             await pilot.press("r")
             await wait_until(pilot, lambda: results.query_one("#history", DataTable).row_count == 1)
             assert not results.query_one("#empty").display
+
+
+def test_settings_reset_of_an_unset_seed_removes_its_row(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        paths = ConfigPaths.from_root(tmp_path / "config")
+        set_value(paths, "challenge.seed", "42")
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            screen = await open_settings(pilot, app)
+            table = screen.query_one(DataTable)
+            table.move_cursor(row=table.get_row_index("challenge.seed"))
+            await pilot.press("d")
+            await wait_until(
+                pilot, lambda: "challenge.seed" not in [r.key.value for r in table.ordered_rows]
+            )
+            assert get_value(paths, "challenge.seed") is None
+
+    asyncio.run(scenario())
+
+
+def test_train_setup_reads_the_changed_setting(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        paths = ConfigPaths.from_root(tmp_path / "config")
+        app = NumbraApp(config_paths=paths, database_path=tmp_path / "numbra.sqlite3")
+        async with app.run_test() as pilot:
+            screen = await open_settings(pilot, app)
+            await edit_difficulty(pilot, screen, "hard")
+            await wait_until(pilot, lambda: not screen.query_one(Input).display)
+            await pilot.press("escape")
+            await wait_until(pilot, lambda: isinstance(app.screen, MenuScreen))
+            app.screen.query_one(OptionList).highlighted = 0
+            await pilot.press("enter")  # Menu: Train
+            await wait_until(pilot, lambda: isinstance(app.screen, TrainSetupScreen))
+            assert app.screen.query_one("#difficulty", Select).value == Difficulty.HARD
 
     asyncio.run(scenario())
 
