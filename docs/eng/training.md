@@ -35,6 +35,8 @@ Funbox is an experimental set of exercises outside the arithmetic generator. Sel
 
 Only `fractions` produces non-integer answers. Answers are case-insensitive for `true` and `false`. Inequalities accept `>`, `<`, `>=`, `<=`, `≥`, and `≤`, with or without `x` and spaces (for example `>4`). Roots and points are typed as a comma-separated list. `graphs` needs the interactive mode, so `numbra challenge` rejects it.
 
+In the interactive mode, the **Funbox** menu entry opens the setup form with one checkbox per mode, starting from `[funbox] modes`; at least one mode must be checked. A graph task shows its figure on a grid from -10 to 10. In a place task, the arrow keys move a cursor and `Enter` sends the point. In a read task, the figure is only shown and you type the answer. The grid needs a terminal at least 39 rows tall; in a shorter one the task shows a hint instead of the grid, and the grid appears once the window is enlarged.
+
 Funbox sessions use the same stages, soft or strict timing, and scoring as ordinary challenges, without operation bonuses. Difficulty changes the number ranges and the number of steps in each mode.
 
 ## Stages and time limits

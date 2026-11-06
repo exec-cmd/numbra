@@ -21,6 +21,7 @@ from ..config import (
     default_config_paths,
     default_database_path,
 )
+from .funbox import FunboxSetupScreen
 from .results import ResultsScreen
 from .settings import SettingsScreen
 from .train import TrainSetupScreen
@@ -32,6 +33,7 @@ MENU: tuple[tuple[str, str, Callable[[], Screen[None]] | None], ...] = (
     ("results", "Results", ResultsScreen),
     ("settings", "Settings", SettingsScreen),
     ("tricks", "Tricks", TricksScreen),
+    ("funbox", "Funbox", FunboxSetupScreen),
     ("quit", "Quit", None),
 )
 

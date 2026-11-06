@@ -13,19 +13,39 @@ from types import SimpleNamespace
 from typing import Any
 
 from textual.pilot import Pilot
-from textual.widgets import Button, DataTable, Input, OptionList, Select, Sparkline, Static, Switch
+from textual.widgets import (
+    Button,
+    Checkbox,
+    DataTable,
+    Input,
+    OptionList,
+    Select,
+    Sparkline,
+    Static,
+    Switch,
+    TabbedContent,
+)
 from typer.testing import CliRunner
 
 import numbra.tui
 from numbra.config import ConfigError, ConfigManager, ConfigPaths, Settings, get_value, set_value
 from numbra.core.challenge import Challenge, ChallengeOptions
-from numbra.core.models import Difficulty, Operation
+from numbra.core.funbox import FunboxMode
+from numbra.core.models import Difficulty, Operation, format_answer
 from numbra.core.stats import Stats
 from numbra.core.tricks import TRICKS
 from numbra.tui.app import MENU, MenuScreen, NumbraApp
+from numbra.tui.funbox import FunboxSetupScreen
+from numbra.tui.graph import GraphCanvas, plot
 from numbra.tui.results import ResultsScreen, SessionScreen
 from numbra.tui.settings import SettingsScreen
-from numbra.tui.train import SummaryScreen, TrainingScreen, TrainSetupScreen
+from numbra.tui.train import (
+    FUNBOX_TITLE,
+    GRAPH_MIN_HEIGHT,
+    SummaryScreen,
+    TrainingScreen,
+    TrainSetupScreen,
+)
 from numbra.tui.tricks import TricksScreen
 
 cli_app_module = importlib.import_module("numbra.cli.app")
@@ -105,7 +125,7 @@ def test_menu_lists_every_entry(tmp_path: Path) -> None:
             menu = app.screen.query_one(OptionList)
             labels = [str(menu.get_option_at_index(i).prompt) for i in range(menu.option_count)]
             assert labels == [label for _, label, _ in MENU]
-            assert labels == ["Train", "Results", "Settings", "Tricks", "Quit"]
+            assert labels == ["Train", "Results", "Settings", "Tricks", "Funbox", "Quit"]
 
     asyncio.run(scenario())
 
@@ -395,6 +415,9 @@ def test_results_tabs_show_saved_statistics(tmp_path: Path) -> None:
             # The trend needs two sessions; the hint takes its place.
             assert not results.query_one("#trend", Sparkline).display
             assert results.query_one("#trend-hint").display
+            assert plain_text(results.query_one("#funbox-empty", Static)) == (
+                "No funbox sessions yet."
+            )
 
 
 def test_settings_reset_restores_the_default(tmp_path: Path) -> None:
@@ -489,3 +512,241 @@ def test_bare_command_opens_the_tui_on_a_terminal(monkeypatch) -> None:
     result = CliRunner().invoke(cli_app, [])
     assert result.exit_code == 0
     assert launched == ["run"]
+
+
+def save_funbox_session(tmp_path: Path) -> int:
+    session = Challenge(make_settings(tmp_path)).create_session(
+        ChallengeOptions(seed=42, stages=1, funbox=(FunboxMode.LOGIC,))
+    )
+    for index, problem in enumerate(session.stages[0].problems):
+        session.submit(0, index, format_answer(problem.answer), 0.5)
+    Stats(tmp_path / "numbra.sqlite3").save(session.complete(actual_duration=1.0))
+    return session.total_examples
+
+
+def graph_seed(tmp_path: Path, kind: str) -> int:
+    """First seed whose first graph task has the given kind ("place" or "read")."""
+    for seed in range(200):
+        session = Challenge(make_settings(tmp_path)).create_session(
+            ChallengeOptions(seed=seed, stages=1, funbox=(FunboxMode.GRAPHS,))
+        )
+        graph = session.stages[0].problems[0].graph
+        if graph is not None and graph.kind == kind:
+            return seed
+    raise AssertionError(f"no seed starts with a {kind} task")
+
+
+async def open_funbox(pilot: Pilot[Any], app: NumbraApp) -> FunboxSetupScreen:
+    await pilot.pause()
+    app.screen.query_one(OptionList).highlighted = 4  # Menu: Funbox
+    await pilot.press("enter")
+    await wait_until(pilot, lambda: isinstance(app.screen, FunboxSetupScreen))
+    screen = app.screen
+    assert isinstance(screen, FunboxSetupScreen)
+    return screen
+
+
+async def start_funbox(pilot: Pilot[Any], app: NumbraApp) -> TrainingScreen:
+    screen = await open_funbox(pilot, app)
+    screen.query_one("#start", Button).focus()
+    await pilot.press("enter")
+    await wait_until(pilot, lambda: isinstance(app.screen, TrainingScreen))
+    training = app.screen
+    assert isinstance(training, TrainingScreen)
+    return training
+
+
+def test_funbox_setup_without_a_mode_shows_the_error(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            screen = await open_funbox(pilot, app)
+            assert screen.title == FUNBOX_TITLE
+            boxes = list(screen.query(Checkbox))
+            assert len(boxes) == len(FunboxMode)
+            assert not any(box.value for box in boxes)
+            screen.query_one("#start", Button).focus()
+            await pilot.press("enter")
+            await wait_until(
+                pilot, lambda: "funbox mode" in plain_text(screen.query_one("#error", Static))
+            )
+            assert isinstance(app.screen, FunboxSetupScreen)
+
+    asyncio.run(scenario())
+
+
+def test_funbox_session_is_saved_outside_the_training_history(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        settings = make_settings(tmp_path, funbox_modes=(FunboxMode.LOGIC,))
+        app = make_app(tmp_path, settings, FakeClock())
+        async with app.run_test() as pilot:
+            training = await start_funbox(pilot, app)
+            session = training.session
+            assert session.mode == "funbox"
+            assert training.title == FUNBOX_TITLE
+            for index, problem in enumerate(session.stages[0].problems):
+                await wait_until(
+                    pilot,
+                    lambda index=index: (
+                        training._index == index and not training.query_one(Input).disabled
+                    ),
+                )
+                await pilot.press(*format_answer(problem.answer))
+                await pilot.press("enter")
+            await wait_until(pilot, lambda: isinstance(app.screen, SummaryScreen))
+            assert app.screen.title == FUNBOX_TITLE
+            summary = " ".join(plain_text(widget) for widget in app.screen.query(Static))
+            assert "Personal best" not in summary
+            assert "Recommendation" not in summary
+            await pilot.press("enter")
+            await wait_until(pilot, lambda: isinstance(app.screen, MenuScreen))
+        stats = Stats(tmp_path / "numbra.sqlite3")
+        assert stats.history() == []
+        saved = stats.funbox_history()
+        assert len(saved) == 1
+        assert saved[0].correct_answers == session.total_examples
+        assert [group.name for group in stats.funbox_stats()] == ["logic"]
+
+    asyncio.run(scenario())
+
+
+def test_cancelled_funbox_session_saves_nothing(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        settings = make_settings(tmp_path, funbox_modes=(FunboxMode.LOGIC,))
+        app = make_app(tmp_path, settings, FakeClock())
+        async with app.run_test() as pilot:
+            training = await start_funbox(pilot, app)
+            await pilot.press("escape")
+            await pilot.press("escape")
+            await wait_until(pilot, lambda: isinstance(app.screen, MenuScreen))
+            assert training.session.mode == "funbox"
+        assert Stats(tmp_path / "numbra.sqlite3").funbox_history() == []
+
+    asyncio.run(scenario())
+
+
+def test_graph_place_task_is_answered_by_moving_the_cursor(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        seed = graph_seed(tmp_path, "place")
+        # The cooldown waits on a gate so the feedback stays on screen until the test reads it.
+        gate = asyncio.Event()
+
+        async def hold(_seconds: float) -> None:
+            await gate.wait()
+
+        settings = make_settings(tmp_path, funbox_modes=(FunboxMode.GRAPHS,), seed=seed)
+        app = make_app(tmp_path, settings, FakeClock(), sleeper=hold)
+        async with app.run_test(size=(80, GRAPH_MIN_HEIGHT)) as pilot:
+            training = await start_funbox(pilot, app)
+            problem = training.session.stages[0].problems[0]
+            assert problem.graph is not None and problem.graph.kind == "place"
+            canvas = training.query_one(GraphCanvas)
+            await wait_until(pilot, lambda: app.focused is canvas)
+            assert not training.query_one(Input).display
+            target = problem.answer
+            assert isinstance(target, tuple)
+            target_x, target_y = int(target[0]), int(target[1])
+            for _ in range(abs(target_x)):
+                await pilot.press("right" if target_x > 0 else "left")
+            for _ in range(abs(target_y)):
+                await pilot.press("up" if target_y > 0 else "down")
+            await pilot.press("enter")
+            await wait_until(
+                pilot, lambda: "Correct" in plain_text(training.query_one("#feedback", Static))
+            )
+            gate.set()
+            await pilot.press("escape")
+            await pilot.press("escape")
+            await wait_until(pilot, lambda: isinstance(app.screen, MenuScreen))
+
+    asyncio.run(scenario())
+
+
+def test_graph_read_task_takes_typed_answer_beside_the_plot(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        seed = graph_seed(tmp_path, "read")
+        gate = asyncio.Event()
+
+        async def hold(_seconds: float) -> None:
+            await gate.wait()
+
+        settings = make_settings(tmp_path, funbox_modes=(FunboxMode.GRAPHS,), seed=seed)
+        app = make_app(tmp_path, settings, FakeClock(), sleeper=hold)
+        async with app.run_test(size=(80, GRAPH_MIN_HEIGHT)) as pilot:
+            training = await start_funbox(pilot, app)
+            problem = training.session.stages[0].problems[0]
+            assert problem.graph is not None and problem.graph.kind == "read"
+            assert training.query_one(GraphCanvas).display
+            answer = training.query_one(Input)
+            await wait_until(pilot, lambda: app.focused is answer)
+            await pilot.press(*format_answer(problem.answer).replace(" ", ""))
+            await pilot.press("enter")
+            await wait_until(
+                pilot,
+                lambda: "Correct" in plain_text(training.query_one("#feedback", Static)),
+            )
+            gate.set()
+            await pilot.press("escape")
+            await pilot.press("escape")
+            await wait_until(pilot, lambda: isinstance(app.screen, MenuScreen))
+
+    asyncio.run(scenario())
+
+
+def test_short_terminal_hides_the_graph_behind_a_hint(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        seed = graph_seed(tmp_path, "place")
+        settings = make_settings(tmp_path, funbox_modes=(FunboxMode.GRAPHS,), seed=seed)
+        app = make_app(tmp_path, settings, FakeClock())
+        async with app.run_test(size=(80, 24)) as pilot:
+            training = await start_funbox(pilot, app)
+            canvas = training.query_one(GraphCanvas)
+            assert not canvas.display
+            assert training.query_one("#graph-hint").display
+            await pilot.resize_terminal(80, GRAPH_MIN_HEIGHT)
+            await wait_until(pilot, lambda: canvas.display)
+            assert not training.query_one("#graph-hint").display
+            await wait_until(pilot, lambda: app.focused is canvas)
+
+    asyncio.run(scenario())
+
+
+def test_plot_draws_axes_and_clips_a_parabola() -> None:
+    text = plot((-100, 0, 1))  # x * x - 100 leaves the grid on both sides
+    lines = text.plain.split("\n")
+    assert len(lines) == 21
+    assert {len(line) for line in lines} == {41}
+    assert "*" in text.plain
+    assert "*" not in plot((1000,)).plain  # a curve that never enters the grid draws no points
+    flat = plot((1000,)).plain.split("\n")  # nothing but the axes
+    assert flat[1][20] == "|" and flat[10][1] == "-"
+    assert flat[10][0] == "+" and flat[0][20] == "+"  # unit ticks at the grid edge
+    assert flat[11][39:41] == "10" and flat[5][22] == "5"  # axis labels
+
+
+def test_plot_marks_the_cursor_on_its_grid_point() -> None:
+    lines = plot((0, 1), cursor=(3, 4)).plain.split("\n")
+    assert lines[10 - 4][2 * (3 + 10)] == "O"
+    assert lines[-1] == "Point: (3, 4)"
+
+
+def test_results_funbox_tab_lists_saved_sessions(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        total = save_funbox_session(tmp_path)
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            results = await open_results(pilot, app)
+            await wait_until(pilot, lambda: results.query_one("#tabs").display)
+            assert not results.query_one("#empty").display
+            assert results.query_one("#funbox", DataTable).row_count == 1
+            assert results.query_one("#funbox-history", DataTable).row_count == 1
+            assert not results.query_one("#funbox-empty").display
+            assert results.query_one("#history", DataTable).row_count == 0
+            results.query_one(TabbedContent).active = "funbox-tab"
+            await pilot.pause()
+            results.query_one("#funbox-history", DataTable).focus()
+            await pilot.press("enter")
+            await wait_until(pilot, lambda: isinstance(app.screen, SessionScreen))
+            assert app.screen.query_one("#attempts", DataTable).row_count == total
+
+    asyncio.run(scenario())

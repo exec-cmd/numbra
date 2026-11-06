@@ -21,6 +21,17 @@ if TYPE_CHECKING:
 # Newest sessions shown in History and Progress; the summary totals cover every session.
 HISTORY_LIMIT = 1000
 _GROUP_HEADINGS = ("Group", "Attempts", "Accuracy", "Avg correct")
+_HISTORY_HEADINGS = (
+    "Date",
+    "Difficulty",
+    "Mode",
+    "Correct",
+    "Accuracy",
+    "Score",
+    "Grade",
+    "Avg",
+    "Duration",
+)
 
 
 def _days(count: int) -> str:
@@ -37,6 +48,23 @@ def _when(record: TrainingRecord) -> str:
 
 def _mode(strict: bool) -> str:
     return "strict" if strict else "soft"
+
+
+def _history_rows(records: Sequence[TrainingRecord]) -> list[tuple[str, ...]]:
+    return [
+        (
+            _when(record),
+            record.difficulty,
+            _mode(record.strict),
+            f"{record.correct_answers}/{record.total_examples}",
+            f"{record.accuracy:.1%}",
+            f"{record.score_percent:.1%}",
+            grade_for_score(record.score_percent),
+            _seconds(record.average_response_seconds),
+            f"{record.actual_duration_seconds:.1f}s",
+        )
+        for record in records
+    ]
 
 
 def _group_rows(sections: Sequence[Sequence[GroupStats]]) -> list[tuple[str, ...]]:
@@ -66,6 +94,7 @@ class ResultsScreen(Screen[None]):
     def __init__(self) -> None:
         super().__init__()
         self._history: list[TrainingRecord] = []
+        self._funbox_history: list[TrainingRecord] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -93,22 +122,17 @@ class ResultsScreen(Screen[None]):
                 yield DataTable(id="records", zebra_stripes=True)
             with TabPane("Tricks"):
                 yield DataTable(id="tricks", zebra_stripes=True)
-            # A later change adds the Funbox tab here, after Tricks.
+            with TabPane("Funbox", id="funbox-tab"):
+                yield DataTable(id="funbox", zebra_stripes=True)
+                yield DataTable(id="funbox-history", cursor_type="row", zebra_stripes=True)
+                yield Static("No funbox sessions yet.", id="funbox-empty", classes="note")
         yield Footer()
 
     def on_mount(self) -> None:
         headings = {
-            "#history": (
-                "Date",
-                "Difficulty",
-                "Mode",
-                "Correct",
-                "Accuracy",
-                "Score",
-                "Grade",
-                "Avg",
-                "Duration",
-            ),
+            "#history": _HISTORY_HEADINGS,
+            "#funbox-history": _HISTORY_HEADINGS,
+            "#funbox": ("Mode", "Attempts", "Accuracy", "Avg correct"),
             "#breakdown": _GROUP_HEADINGS,
             "#weak": _GROUP_HEADINGS,
             "#records": (
@@ -130,14 +154,16 @@ class ResultsScreen(Screen[None]):
     def action_reload(self) -> None:
         stats = Stats(self._numbra().database_path)
         self._history = stats.history(HISTORY_LIMIT)
-        empty = not self._history
+        self._funbox_history = stats.funbox_history(HISTORY_LIMIT)
+        empty = not self._history and not self._funbox_history
         self.query_one("#empty").display = empty
-        self.query_one("#summary").display = not empty
+        self.query_one("#summary").display = bool(self._history)
         self.query_one("#tabs").display = not empty
-        if empty:
+        self._fill_funbox(stats)
+        if not self._history:
             return
         self._fill_summary(stats)
-        self._fill_history()
+        self._fill("#history", _history_rows(self._history))
         self._fill_progress()
         breakdown = stats.breakdown()
         self._fill(
@@ -181,6 +207,26 @@ class ResultsScreen(Screen[None]):
     def _open_session(self, event: DataTable.RowSelected) -> None:
         self.app.push_screen(SessionScreen(self._history[event.cursor_row]))
 
+    @on(DataTable.RowSelected, "#funbox-history")
+    def _open_funbox_session(self, event: DataTable.RowSelected) -> None:
+        self.app.push_screen(SessionScreen(self._funbox_history[event.cursor_row]))
+
+    def _fill_funbox(self, stats: Stats) -> None:
+        self._fill(
+            "#funbox",
+            [
+                (
+                    item.name,
+                    str(item.attempts),
+                    f"{item.accuracy:.1%}",
+                    _seconds(item.average_correct_seconds),
+                )
+                for item in stats.funbox_stats()
+            ],
+        )
+        self._fill("#funbox-history", _history_rows(self._funbox_history))
+        self.query_one("#funbox-empty").display = not self._funbox_history
+
     def _fill_summary(self, stats: Stats) -> None:
         aggregate = stats.aggregate()
         current, longest = stats.streak(self._numbra().today())
@@ -193,22 +239,6 @@ class ResultsScreen(Screen[None]):
             f"[bold]Streak:[/bold] {_days(current)} (best {longest}) · "
             f"[bold]Last grade:[/bold] {grade_for_score(last)} ({last:.1%})"
         )
-
-    def _fill_history(self) -> None:
-        table = self.query_one("#history", DataTable)
-        table.clear()
-        for record in self._history:
-            table.add_row(
-                _when(record),
-                record.difficulty,
-                _mode(record.strict),
-                f"{record.correct_answers}/{record.total_examples}",
-                f"{record.accuracy:.1%}",
-                f"{record.score_percent:.1%}",
-                grade_for_score(record.score_percent),
-                _seconds(record.average_response_seconds),
-                f"{record.actual_duration_seconds:.1f}s",
-            )
 
     def _fill_progress(self) -> None:
         scores = [record.score_percent for record in self._history]

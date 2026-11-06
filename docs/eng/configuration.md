@@ -19,7 +19,7 @@ sqrt = true
 
 The supported difficulties are `easy`, `normal`, and `hard`. Older files that still say `very-easy` or `very-hard` keep working: they are read as `easy` or `hard` with a warning, and matching `[difficulties.very-easy]` or `[difficulties.very-hard]` tables are ignored with a warning. Numbra does not rewrite your file on its own; remove those values when convenient. Advanced topics (`sqrt`, `trig`, `log`, `power`, and `identities`) and `tricks` are off by default; `--advanced` never turns `tricks` on or off. `identities` is a separate choice and is not an operation in the `operations` list. See [Usage](usage.md) for command-line switches and [Training rules](training.md) for difficulty profiles.
 
-The `[funbox]` table holds `modes = []`, a list of experimental funbox modes (`fractions`, `substitution`, `equations`, `logic`, `graphs`, `derivatives`). Numbra checks the names when it reads the file and reports an unknown mode with `funbox.modes`. `numbra challenge --funbox` does not read this list; it uses the modes given on its command line. See [Training rules](training.md#funbox-experimental).
+The `[funbox]` table holds `modes = []`, a list of experimental funbox modes (`fractions`, `substitution`, `equations`, `logic`, `graphs`, `derivatives`). Numbra checks the names when it reads the file and reports an unknown mode with `funbox.modes`. The interactive Funbox screen starts with these modes checked. `numbra challenge --funbox` does not read this list; it uses the modes given on its command line. See [Training rules](training.md#funbox-experimental).
 
 Leave out `seed` to get a new random sequence each time. Set an integer seed when you want to repeat a generated session with matching settings.
 

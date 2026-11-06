@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from rich.text import Text
 from textual import on
@@ -33,15 +33,23 @@ from ..core.challenge import (
     TrainingSession,
     grade_for_score,
 )
-from ..core.models import Difficulty, Operation, Topic, parse_operation_selection
+from ..core.models import (
+    Difficulty,
+    Operation,
+    Topic,
+    format_answer,
+    parse_operation_selection,
+)
 from ..core.report import RECOMMENDATION_TEXT, TrainingReport, build_report
 from ..core.stats import Stats
+from .graph import GraphCanvas
 
 if TYPE_CHECKING:
     from .app import NumbraApp
 
 # Checkbox tokens, in the same spelling as `numbra challenge -o`.
 _TOKENS = ("+", "-", "*", "/", "^", "sqrt", "trig", "log", "tricks", "identities")
+FUNBOX_TITLE = "Funbox (experimental)"
 
 
 def _enabled_by_default(token: str, settings: Settings) -> bool:
@@ -100,11 +108,7 @@ class TrainSetupScreen(Screen[None]):
             yield Input(str(challenge.duration_minutes), id="duration")
             yield Label("Stages")
             yield Input(str(challenge.stages), id="stages")
-            yield Label("Operations and topics")
-            for token in _TOKENS:
-                box = Checkbox(token, value=_enabled_by_default(token, self._settings))
-                self._boxes[token] = box
-                yield box
+            yield from self._choices(self._settings)
             yield Label("Strict: an example ends at its time limit")
             yield Switch(value=False, id="strict")
             yield Label("Seed (empty for a random seed)")
@@ -127,26 +131,44 @@ class TrainSetupScreen(Screen[None]):
         warnings = (*self._settings.warnings, *session.warnings)
         self.app.switch_screen(TrainingScreen(session, warnings))
 
-    def _create_session(self) -> TrainingSession:
-        if self._settings is None:
-            raise ConfigError("settings are not loaded")
+    def _choices(self, settings: Settings) -> ComposeResult:
+        """Operation and topic checkboxes; the funbox setup yields its own."""
+        yield Label("Operations and topics")
+        for token in _TOKENS:
+            box = Checkbox(token, value=_enabled_by_default(token, settings))
+            self._boxes[token] = box
+            yield box
+
+    def _chosen(self) -> dict[str, Any]:
+        """ChallengeOptions fields set by the checkboxes; raises ValueError for an empty choice."""
         tokens = [
             token for token, box in self._boxes.items() if token != "identities" and box.value
         ]
+        return {
+            "operations": parse_operation_selection(tokens),
+            "identities": self._boxes["identities"].value,
+        }
+
+    def _create_session(self) -> TrainingSession:
+        if self._settings is None:
+            raise ConfigError("settings are not loaded")
         seed_text = self.query_one("#seed", Input).value.strip()
         options = ChallengeOptions(
             duration_minutes=_whole(self.query_one("#duration", Input).value, "Duration", 1),
             stages=_whole(self.query_one("#stages", Input).value, "Stages", 1),
             difficulty=cast(Difficulty, self.query_one("#difficulty", Select).value),
             seed=_whole(seed_text, "Seed") if seed_text else None,
-            operations=parse_operation_selection(tokens),
             strict=self.query_one("#strict", Switch).value,
-            identities=self._boxes["identities"].value,
+            **self._chosen(),
         )
         return Challenge(self._settings, clock=self._numbra().clock).create_session(options)
 
     def _numbra(self) -> NumbraApp:
         return cast("NumbraApp", self.app)
+
+
+# Rows a graph task needs for the whole grid plus the answer line and timer (measured at 80 columns).
+GRAPH_MIN_HEIGHT = 39
 
 
 class TrainingScreen(Screen[None]):
@@ -163,11 +185,14 @@ class TrainingScreen(Screen[None]):
     TrainingScreen #answer { width: 40; }
     TrainingScreen #timer { margin: 1 0 0 0; }
     TrainingScreen #feedback { height: auto; margin-top: 1; }
+    TrainingScreen #graph-hint { color: $warning; }
     """
 
     def __init__(self, session: TrainingSession, warnings: Sequence[str] = ()) -> None:
         super().__init__()
         self.session = session
+        if session.mode == "funbox":
+            self.title = FUNBOX_TITLE
         self._warnings = tuple(warnings)
         self._positions = tuple(
             (stage, problem)
@@ -187,6 +212,11 @@ class TrainingScreen(Screen[None]):
             yield Static(id="stage")
             yield Static(id="example")
             yield Static(id="expression")
+            yield GraphCanvas(id="graph")
+            yield Static(
+                f"Enlarge the terminal to at least {GRAPH_MIN_HEIGHT} rows to see the graph.",
+                id="graph-hint",
+            )
             yield Input(placeholder="Answer, then Enter", id="answer")
             yield ProgressBar(total=1, show_eta=False, show_percentage=False, id="timer")
             yield Static(id="clock")
@@ -214,15 +244,38 @@ class TrainingScreen(Screen[None]):
         self.query_one("#example", Static).update(
             f"Example {self._index + 1}/{len(self._positions)}"
         )
-        self.query_one("#expression", Static).update(plan.problems[problem_number].expression)
+        problem = plan.problems[problem_number]
+        self.query_one("#expression", Static).update(problem.expression)
         self.query_one("#feedback", Static).update("")
+        graph = self.query_one(GraphCanvas)
         answer = self.query_one("#answer", Input)
         answer.value = ""
         answer.disabled = False
-        answer.focus()
+        # A place task is answered on the plot; a read task shows the plot and takes typed text.
+        placing = problem.graph is not None and problem.graph.kind == "place"
+        answer.display = not placing
+        if problem.graph is not None:
+            graph.show(problem.graph)
+        self._fit_graph()
+        if not placing:
+            answer.focus()
         self._example_started = self._numbra().clock()
         self._phase = "answer"
         self._armed = False
+
+    def on_resize(self) -> None:
+        self._fit_graph()
+
+    def _fit_graph(self) -> None:
+        """Show the plot only when the whole grid fits; otherwise ask for a taller terminal."""
+        stage_number, problem_number = self._positions[self._index]
+        spec = self.session.stages[stage_number].problems[problem_number].graph
+        fits = self.size.height >= GRAPH_MIN_HEIGHT
+        graph = self.query_one(GraphCanvas)
+        graph.display = spec is not None and fits
+        self.query_one("#graph-hint", Static).display = spec is not None and not fits
+        if graph.display and spec is not None and spec.kind == "place":
+            graph.focus()
 
     def _tick(self) -> None:
         if self._phase != "answer":
@@ -247,12 +300,19 @@ class TrainingScreen(Screen[None]):
         elapsed = self._numbra().clock() - self._example_started
         self._record(event.value, elapsed, timed_out=False)
 
+    @on(GraphCanvas.Placed)
+    def _placed(self, event: GraphCanvas.Placed) -> None:
+        if self._phase != "answer":
+            return
+        elapsed = self._numbra().clock() - self._example_started
+        self._record(f"{event.x}, {event.y}", elapsed, timed_out=False)
+
     def _record(self, answer: str | None, elapsed: float, timed_out: bool) -> None:
         stage_number, problem_number = self._positions[self._index]
         attempt = self.session.submit(stage_number, problem_number, answer, elapsed, timed_out)
-        expected = self.session.stages[stage_number].problems[problem_number].answer
+        expected = format_answer(self.session.stages[stage_number].problems[problem_number].answer)
         if attempt.timed_out:
-            message = Text.assemble(("Time! ", "bold yellow"), str(expected))
+            message = Text.assemble(("Time! ", "bold yellow"), expected)
         elif attempt.is_correct:
             message = Text.assemble(("Correct", "bold green"), f" · score {attempt.score:.2f}")
         else:
@@ -293,8 +353,10 @@ class TrainingScreen(Screen[None]):
         self._stop_timer()
         completed = self.session.complete(self._numbra().clock() - self._session_started)
         stats = Stats(self._numbra().database_path)
-        previous = stats.comparable_history(completed, limit=1)
-        progress = stats.progress_history(completed)
+        # Funbox has no comparable history or progress group, as in `numbra challenge`.
+        funbox = completed.mode == "funbox"
+        previous = [] if funbox else stats.comparable_history(completed, limit=1)
+        progress = [] if funbox else stats.progress_history(completed)
         stats.save(completed)
         streak = stats.streak(self._numbra().today())
         report = build_report(completed, previous[0] if previous else None, progress, streak)
@@ -321,6 +383,8 @@ class SummaryScreen(Screen[None]):
         super().__init__()
         self._completed = completed
         self._report = report
+        if completed.mode == "funbox":
+            self.title = FUNBOX_TITLE
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -347,6 +411,8 @@ def _summary_markup(completed: CompletedTraining, report: TrainingReport) -> str
         f"actual: {completed.actual_duration_seconds:.1f}s",
         "",
     ]
+    if completed.mode == "funbox":
+        lines.insert(0, f"[bold]{FUNBOX_TITLE}[/bold]")
     for tally in report.stage_kinds:
         lines.append(
             f"{tally.kind.value}: {tally.correct}/{tally.total} correct, {tally.timeouts} timeouts"
@@ -384,10 +450,13 @@ def _summary_markup(completed: CompletedTraining, report: TrainingReport) -> str
         if report.previous_correct_seconds is not None:
             parts.append(f"previous {report.previous_correct_seconds:.2f}s")
         lines.append(" · ".join(parts))
-    if report.is_new_best:
-        lines.append(f"[bold green]New personal best: {completed.score_percent:.1%}![/bold green]")
-    else:
-        lines.append(f"Personal best: {report.personal_best:.1%} ({report.score_vs_best:+.1%})")
+    if completed.mode == "challenge":  # funbox keeps no personal best, as in the CLI
+        if report.is_new_best:
+            lines.append(
+                f"[bold green]New personal best: {completed.score_percent:.1%}![/bold green]"
+            )
+        else:
+            lines.append(f"Personal best: {report.personal_best:.1%} ({report.score_vs_best:+.1%})")
     lines.append(f"Streak: {_days(report.current_streak)} (best {report.longest_streak})")
     if report.recommendation is not None:
         lines.append(RECOMMENDATION_TEXT[report.recommendation])
