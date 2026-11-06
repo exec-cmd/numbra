@@ -15,6 +15,13 @@ class Recommendation(StrEnum):
     KEEP = "keep"
 
 
+RECOMMENDATION_TEXT = {
+    Recommendation.NEXT: "Recommendation: try the next difficulty level.",
+    Recommendation.LOWER: "Recommendation: repeat or lower the difficulty level.",
+    Recommendation.KEEP: "Recommendation: keep the current difficulty level.",
+}
+
+
 @dataclass(frozen=True, slots=True)
 class Tally:
     correct: int

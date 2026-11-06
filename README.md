@@ -37,7 +37,10 @@ Or download `numbra-<version>-py3-none-any.whl` from the release assets and run 
 
 ## Quick start
 
+Run `numbra` with no arguments in a terminal to open the interactive interface: a menu for training and tricks. The commands below remain available for scripts and quick use.
+
 ```bash
+numbra                           # interactive interface
 numbra challenge                 # six minutes, three stages, normal difficulty
 numbra challenge -d hard --strict
 numbra challenge -o "*,/" -t 3   # only multiplication and division, three minutes

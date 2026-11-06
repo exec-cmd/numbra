@@ -9,6 +9,7 @@ Read the relevant implementation and tests before changing behavior. Prefer the 
 ## Repository map
 
 - `src/numbra/cli/` owns Typer commands, Rich output, Prompt Toolkit input, and logging setup.
+- `src/numbra/tui/` owns the Textual interface (`numbra` with no arguments on a terminal): `app.py` has the menu and the `MENU` list, `train.py` the setup, timed run and summary screens, `tricks.py` the tricks table. It is presentation only and drives the same core sessions and stats as the CLI.
 - `src/numbra/config/` owns platform paths, default files, parsing, validation, and public config exports.
 - `src/numbra/core/` owns arithmetic models, generation (`catalog.py`, `tricks.py`, `generator.py`), stage allocation, sessions, scoring, statistics, and the post-training report (`report.py`). Keep this package independent of Typer and Rich.
 - `src/numbra/core/db/schema.py` defines the SQLite schema. `Stats._migrate()` handles existing databases.
@@ -43,7 +44,7 @@ Run checks in proportion to the change. Start with the closest tests while itera
 
 ## Architecture and compatibility
 
-- Put business rules in `core`, persistence and file parsing in their existing packages, and terminal presentation in `cli`.
+- Put business rules in `core`, persistence and file parsing in their existing packages, and terminal presentation in `cli` or `tui`.
 - Preserve the public package entry point `numbra:main`, `numbra.cli.app`, and exports from `numbra.config` unless a requested breaking change explicitly permits otherwise.
 - Use injected clocks, paths, sleepers, and temporary directories in tests. Tests must not read or write the developer's real configuration, data, database, or log files.
 - Keep dataclasses immutable where the current model uses `frozen=True, slots=True`.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 import time
 from collections.abc import Sequence
 from datetime import date, datetime
@@ -35,7 +36,7 @@ from ..core.challenge import (
 )
 from ..core.generator import trick_levels
 from ..core.models import Difficulty, Operation, StageKind, Topic, parse_operation_selection
-from ..core.report import Recommendation, TrainingReport, build_report
+from ..core.report import RECOMMENDATION_TEXT, TrainingReport, build_report
 from ..core.stats import GroupStats, Stats
 from ..core.tricks import TRICKS
 from .input import cooldown, timed_prompt
@@ -45,7 +46,6 @@ logger = logging.getLogger(__name__)
 console = Console()
 app = typer.Typer(
     add_completion=False,
-    no_args_is_help=True,
     invoke_without_command=True,
     help="Train mental arithmetic from your terminal.",
 )
@@ -62,12 +62,22 @@ def _parse_operations(value: str | None) -> tuple[Operation | Topic, ...] | None
 
 @app.callback()
 def callback(
+    ctx: typer.Context,
     version: Annotated[bool, typer.Option("--version", help="Show version and exit.")] = False,
     verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Show log messages.")] = False,
 ) -> None:
     configure_logging(default_log_path(), verbose)
     if version:
         console.print(f"numbra {__version__}")
+        raise typer.Exit()
+    if ctx.invoked_subcommand is None:
+        # Piped or scripted runs get the help text; only a terminal gets the interactive UI.
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            from ..tui import NumbraApp
+
+            NumbraApp().run()
+        else:
+            typer.echo(ctx.get_help())
         raise typer.Exit()
 
 
@@ -213,13 +223,6 @@ def challenge(
         stats.streak(date.today()),
     )
     _print_summary(completed, report, success_style)
-
-
-RECOMMENDATION_TEXT = {
-    Recommendation.NEXT: "Recommendation: try the next difficulty level.",
-    Recommendation.LOWER: "Recommendation: repeat or lower the difficulty level.",
-    Recommendation.KEEP: "Recommendation: keep the current difficulty level.",
-}
 
 
 def _print_summary(

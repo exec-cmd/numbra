@@ -11,6 +11,10 @@ Read when a command fails to start, when you add an import in `core` or at packa
 
 `numbra.core` must load without Typer or Rich. `numbra/__init__.py` and `core/__init__.py` use lazy `__getattr__` imports for this, and `tests/test_imports.py` fails when a terminal dependency leaks into `core` or when `numbra.app` and `numbra.cli.app` diverge. Put new terminal imports in `cli/`.
 
+## Textual interface
+
+`numbra/tui` is imported only when `numbra` runs with no arguments on a terminal, so other commands do not load Textual. Its tests run headless: `tests/test_tui.py` drives `NumbraApp` through `App.run_test()` inside `asyncio.run`, with `Pilot.press` for keys. The app takes injected settings, database path, date, clock and cooldown sleeper, so the tests use a fake clock and a no-op sleeper, and wait only for the screen to settle; the file runs in about five seconds. Run it alone with `uv run python -m pytest tests/test_tui.py`.
+
 ## Which tests answer which change
 
 Start with the closest file, then run everything.
@@ -21,6 +25,7 @@ Start with the closest file, then run everything.
 - Storage and progress: `test_stats.py`, `test_stats_migrations.py`, `test_progress.py`
 - Post-training summary and recommendation: `test_report.py`
 - Commands and output: `test_cli.py`
+- Interactive interface, menu, training flow and summary: `test_tui.py`
 
 ## Documentation
 

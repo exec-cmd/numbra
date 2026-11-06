@@ -1,5 +1,16 @@
 # Usage
 
+## Interactive mode
+
+Run `numbra` with no arguments in a terminal to open the interactive interface. The menu offers **Train** and **Tricks**; `q` or **Quit** exits. Train walks through a setup form (difficulty, duration, stages, operations and topics, strict mode, seed), then the timed run, then the summary. The form starts from your saved settings. Without a terminal, for example when output is piped, `numbra` prints the help text instead. Every command in this page works the same way.
+
+Keys during a training:
+
+- `Enter` submits the answer. After the cooldown the next example appears.
+- `Esc` pressed twice cancels the training. Nothing is saved.
+- In the summary, `Enter` or `Esc` returns to the menu. The setup form and Tricks screen close with `Esc`.
+- `Ctrl+Q` quits from any screen. An unfinished training is not saved.
+
 ## Install and start
 
 Numbra requires Python 3.13 or newer. Install it from a project checkout with:
