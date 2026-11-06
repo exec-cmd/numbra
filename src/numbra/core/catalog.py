@@ -68,9 +68,23 @@ def problem(
     )
 
 
+def _chain_terms(tree: Expr) -> tuple[Expr, ...]:
+    if tree.kind in {"+", "-"}:
+        return (*_chain_terms(tree.args[0]), *_chain_terms(tree.args[1]))
+    return (tree,)
+
+
+def _equal_term_chain(tree: Expr) -> bool:
+    """Rejects 'log_3 9 + log_2 4 + 2': three or more additive terms that all have one value."""
+    if tree.kind not in {"+", "-"}:
+        return False
+    terms = _chain_terms(tree)
+    return len(terms) >= 3 and len({term.evaluate() for term in terms}) == 1
+
+
 def accepted(tree: Expr, max_result: int) -> bool:
     try:
-        return valid_bounds(tree, max_result) and meaningful(tree)
+        return valid_bounds(tree, max_result) and meaningful(tree) and not _equal_term_chain(tree)
     except (ValueError, ZeroDivisionError, OverflowError):
         return False
 
@@ -107,7 +121,7 @@ def arithmetic_catalog(
                     tree = B(op.value, N(a), N(b))
                     if accepted(tree, max_result):
                         atoms[op].append(tree)
-    bases = {op: sample(tuple(items), 12) for op, items in atoms.items()}
+    bases = {op: sample(tuple(items), 16) for op, items in atoms.items()}
     result: dict[tuple[object, ...], Problem] = {}
 
     def add(tree: Expr, strategy: str) -> None:
@@ -125,7 +139,7 @@ def arithmetic_catalog(
         for tree in trees:
             for outer in operations:
                 if min_terms <= 3 <= max_terms:
-                    for number in sample(values, 6):
+                    for number in sample(values, 8):
                         if outer is Operation.DIVIDE:
                             value = tree.evaluate()
                             if number < 2 or value % number or value == number:
@@ -146,7 +160,7 @@ def arithmetic_catalog(
                                 continue
                         add(combined, "two-branches")
                     # Homogeneous subtraction/division retain left-to-right practice.
-                    for a, b in zip(sample(values, 6), reversed(sample(values, 6)), strict=True):
+                    for a, b in zip(sample(values, 8), reversed(sample(values, 8)), strict=True):
                         partial = B(outer.value, tree, N(a))
                         combined = B(op.value, partial, N(b))
                         if outer is Operation.DIVIDE and (a < 2 or tree.evaluate() % a):
@@ -274,7 +288,7 @@ def topic_catalog(
         if accepted(form, max_result)
     )
     result: dict[tuple[object, ...], Problem] = {}
-    values = sample(operands(minimum, min(maximum, max_result)), 4)
+    values = sample(operands(minimum, min(maximum, max_result)), 6)
 
     def add(tree: Expr, name: str, topics: tuple[Topic, ...] = (topic,)) -> None:
         # Answers are integers outside funbox; fractional intermediates stay inside expressions.
@@ -287,13 +301,13 @@ def topic_catalog(
         return ()
 
     # Two tabular functions of the same or a different enabled topic.
-    partners = [(t, topic) for t, _ in atoms[:: max(1, len(atoms) // 4)][:4]]
+    partners = [(t, topic) for t, _ in atoms[:: max(1, len(atoms) // 6)][:6]]
     for other in other_topics:
         partners.extend(
             (t, other)
             for t, _ in tuple(
                 (t, n) for t, n in topic_atoms(other, power_enabled) if accepted(t, max_result)
-            )[:2]
+            )[:4]
         )
 
     for tree, name in atoms:

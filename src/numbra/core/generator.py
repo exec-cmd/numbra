@@ -4,9 +4,10 @@ import random
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, replace
 from functools import lru_cache
+from typing import cast
 
 from .catalog import arithmetic_catalog, topic_catalog
-from .expressions import Expr, canonical_key, solution_steps, work_units
+from .expressions import Expr, Key, canonical_key, solution_steps, work_units
 from .models import BASIC_OPERATIONS, Difficulty, Operation, Problem, Topic
 from .tricks import trick_catalog
 
@@ -29,6 +30,8 @@ class DifficultyProfile:
 CANDIDATE_WINDOW = 4
 # A large operand may appear this many times per session while alternatives exist.
 OPERAND_REPEAT_CAP = 3
+# A template (expression shape with numbers masked) may appear this many times per session.
+TEMPLATE_REPEAT_CAP = 2
 
 # Tricks keep their own result ladder: a profile's max_result would hide most of them.
 TRICK_MAX_RESULT = {
@@ -87,6 +90,7 @@ class ProblemGenerator:
         self._topic_counts: Counter[str] = Counter()
         self._operation_counts: Counter[Operation] = Counter()
         self._operand_counts: Counter[int] = Counter()
+        self._template_counts: Counter[Key] = Counter()
         self._strategy_counts: Counter[str] = Counter()
         self._cycle: deque[int] = deque()
         self._groups: dict[str, list[tuple[tuple[Problem, ...], deque[Problem]]]] = defaultdict(
@@ -161,10 +165,12 @@ class ProblemGenerator:
                 overused = any(
                     self._operand_counts[n] + numbers.count(n) > OPERAND_REPEAT_CAP for n in numbers
                 )
+                template_overused = self._template_counts[_template(p)] >= TEMPLATE_REPEAT_CAP
                 # Slack of 2 lets multi-step levels (e.g. "a - b - c") in; later picks rebalance.
                 rank = (
                     max(0, imbalance - 2),
                     int(overused),
+                    int(template_overused),
                     abs(complexity_score(p) - 2 - target),
                     self._strategy_counts[p.strategy] if tricks else 0,
                     reuse,
@@ -201,6 +207,7 @@ class ProblemGenerator:
         else:
             self._operation_counts.update(p.operations)
         self._operand_counts.update(_large_numbers(p))
+        self._template_counts[_template(p)] += 1
         self._topic_counts.update({family: 1})
         return replace(p, solution_steps=solution_steps(p.as_tree()))
 
@@ -225,7 +232,8 @@ class ProblemGenerator:
         """Reset local operator balance and level cycle, counting a carried candidate."""
         self._operation_counts.clear()
         self._cycle.clear()
-        if pending is not None:
+        # Tricks stay outside operation balance, carried over or not (see _take).
+        if pending is not None and pending.family != Topic.TRICKS.value:
             self._operation_counts.update(pending.operations)
 
     def generate_progressive_batches(
@@ -264,6 +272,19 @@ def _large_numbers(problem: Problem) -> tuple[int, ...]:
 @lru_cache(maxsize=65536)
 def _tree_large_numbers(expr: Expr) -> tuple[int, ...]:
     return tuple(node.value for node in _nodes(expr) if node.kind == "number" and node.value > 12)
+
+
+def _template(problem: Problem) -> Key:
+    """Canonical shape with every number masked, so 2 + 3 and 4 + 5 share a template."""
+    return _mask_numbers(canonical_key(problem.as_tree()))
+
+
+@lru_cache(maxsize=65536)
+def _mask_numbers(key: Key) -> Key:
+    if key[0] == "number":
+        return ("number",)
+    children = cast(tuple[Key, ...], key[1:])
+    return (key[0], *(_mask_numbers(child) for child in children))
 
 
 def _small_quotient(problem: Problem) -> bool:

@@ -134,13 +134,14 @@ def test_operation_bonus_changes_problem_limit(tmp_path: Path) -> None:
 
 
 def test_seeded_session_keeps_comparable_complexity_between_stages(tmp_path: Path) -> None:
+    # Six minutes is the default length; a three-minute session has about three problems per stage.
     settings = ConfigManager(ConfigPaths.from_root(tmp_path / "config")).load_or_create()
     session = Challenge(settings).create_session(
         ChallengeOptions(
             difficulty=Difficulty.HARD,
             seed=42,
             stages=3,
-            duration_minutes=3,
+            duration_minutes=6,
             operations=(Operation.ADD, Operation.SUBTRACT, Operation.MULTIPLY, Operation.DIVIDE),
         )
     )
