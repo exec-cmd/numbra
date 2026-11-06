@@ -48,6 +48,9 @@ WORK_BANDS = {
 
 
 def canonical_problem_key(problem: Problem) -> tuple[object, ...]:
+    if problem.tree is None and problem.family == "funbox":
+        # Funbox texts are not parsed as arithmetic; their display text identifies them.
+        return ("funbox", problem.expression)
     return canonical_key(problem.as_tree())
 
 

@@ -34,8 +34,16 @@ from ..core.challenge import (
     TrainingSession,
     grade_for_score,
 )
+from ..core.funbox import FunboxMode, parse_funbox_modes
 from ..core.generator import trick_levels
-from ..core.models import Difficulty, Operation, StageKind, Topic, parse_operation_selection
+from ..core.models import (
+    Difficulty,
+    Operation,
+    StageKind,
+    Topic,
+    format_answer,
+    parse_operation_selection,
+)
 from ..core.report import RECOMMENDATION_TEXT, TrainingReport, build_report
 from ..core.stats import GroupStats, Stats
 from ..core.tricks import TRICKS
@@ -124,9 +132,23 @@ def challenge(
         bool | None,
         typer.Option("--identities/--no-identities", help="Enable identity problems."),
     ] = None,
+    funbox: Annotated[
+        str | None,
+        typer.Option(
+            "--funbox",
+            help="Experimental: comma list of fractions, substitution, equations, logic, "
+            "derivatives. Replaces the operation selection.",
+        ),
+    ] = None,
 ) -> None:
     try:
         selected_operations = _parse_operations(operations)
+        funbox_modes = parse_funbox_modes(funbox) if funbox is not None else None
+        if funbox_modes is not None:
+            if FunboxMode.GRAPHS in funbox_modes:
+                raise ValueError("graphs requires the interactive mode (run `numbra`)")
+            if selected_operations is not None or advanced is not None or identities is not None:
+                raise ValueError("--funbox cannot be combined with -o, --advanced or --identities")
         settings = ConfigManager().load_or_create()
         session: TrainingSession = Challenge(settings).create_session(
             ChallengeOptions(
@@ -139,6 +161,7 @@ def challenge(
                 cooldown_seconds=cooldown_seconds,
                 advanced=advanced,
                 identities=identities,
+                funbox=funbox_modes,
             )
         )
     except (ConfigError, ValueError) as exc:
@@ -161,13 +184,17 @@ def challenge(
             *(topic.value for topic in session.topics if topic is not Topic.IDENTITIES),
         )
     )
+    if funbox_modes is not None:
+        selection = "[bold]Funbox (experimental):[/bold] " + ", ".join(funbox_modes)
+    else:
+        selection = f"[bold]Operations:[/bold] {displayed_operations}"
     console.print(
         Panel.fit(
             f"[bold]Difficulty:[/bold] {session.difficulty.value}\n"
             f"[bold]Stages:[/bold] {len(session.stages)} · [bold]Examples:[/bold] {session.total_examples}\n"
             f"[bold]Mode:[/bold] {'strict' if session.strict else 'soft'} · "
             f"[bold]Cooldown:[/bold] {session.cooldown_seconds:g}s\n"
-            f"[bold]Operations:[/bold] {displayed_operations} · [bold]Seed:[/bold] {session.seed}",
+            f"{selection} · [bold]Seed:[/bold] {session.seed}",
             title="Numbra challenge",
             border_style=accent_style,
         )
@@ -189,19 +216,25 @@ def challenge(
                     f"limit {limit:g}s"
                 )
                 before = time.monotonic()
-                answer = asyncio.run(
-                    timed_prompt(f"{problem.expression} = ", limit, strict=session.strict)
+                # Funbox texts end with their own question, so no "=" is added.
+                prompt = (
+                    f"{problem.expression} "
+                    if session.mode == "funbox"
+                    else f"{problem.expression} = "
                 )
+                answer = asyncio.run(timed_prompt(prompt, limit, strict=session.strict))
                 elapsed = time.monotonic() - before
                 attempt = session.submit(
                     stage_index, problem_index, answer, elapsed, answer is None
                 )
                 if attempt.timed_out:
-                    console.print(f"[{timer_style}]Time![/] {problem.answer}")
+                    console.print(f"[{timer_style}]Time![/] {format_answer(problem.answer)}")
                 elif attempt.is_correct:
                     console.print(f"[{success_style}]Correct[/] · score {attempt.score:.2f}")
                 else:
-                    console.print(f"[{error_style}]Incorrect[/] (answer: {problem.answer})")
+                    console.print(
+                        f"[{error_style}]Incorrect[/] (answer: {format_answer(problem.answer)})"
+                    )
                 if example_number < session.total_examples:
                     console.print(f"[dim]Next example in {session.cooldown_seconds:g}s[/dim]")
                     asyncio.run(cooldown(session.cooldown_seconds))
@@ -212,8 +245,10 @@ def challenge(
         raise typer.Exit(code=130) from None
     completed = session.complete(time.monotonic() - started)
     stats = Stats(default_database_path())
-    comparable = stats.comparable_history(completed, limit=1)
-    progress = stats.progress_history(completed)
+    # Funbox has no comparable history or progress group, so its summary stands alone.
+    is_funbox = completed.mode == "funbox"
+    comparable = [] if is_funbox else stats.comparable_history(completed, limit=1)
+    progress = [] if is_funbox else stats.progress_history(completed)
     training_id = stats.save(completed)
     logger.info("Challenge %s saved with %s attempts", training_id, len(completed.attempts))
     report = build_report(
@@ -276,10 +311,13 @@ def _print_summary(
         if report.previous_correct_seconds is not None:
             parts.append(f"previous {report.previous_correct_seconds:.2f}s")
         console.print(" · ".join(parts))
-    if report.is_new_best:
-        console.print(f"[{success_style}]New personal best: {completed.score_percent:.1%}![/]")
-    else:
-        console.print(f"Personal best: {report.personal_best:.1%} ({report.score_vs_best:+.1%})")
+    if completed.mode == "challenge":
+        if report.is_new_best:
+            console.print(f"[{success_style}]New personal best: {completed.score_percent:.1%}![/]")
+        else:
+            console.print(
+                f"Personal best: {report.personal_best:.1%} ({report.score_vs_best:+.1%})"
+            )
     console.print(f"Streak: {_days(report.current_streak)} (best {report.longest_streak})")
     if report.recommendation is not None:
         console.print(RECOMMENDATION_TEXT[report.recommendation])

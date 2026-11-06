@@ -20,6 +20,23 @@ Advanced topics are bounded: square roots cover perfect squares with roots 2–2
 
 The `tricks` topic has fourteen tricks; `numbra tricks` lists them. Each problem is a single trick with no extra steps, and its work units are set by the trick and the size of its numbers instead of by the general heuristic, because a trick makes large-looking numbers cheap. Tricks use their own result limits: 400 on `easy`, 2,500 on `normal`, and 10,000 on `hard`. Not every trick exists on every level, and on `hard` trick problems are worth 4–5 units. A session rotates through the available tricks, and tricks do not count toward operation balance.
 
+## Funbox (experimental)
+
+Funbox is an experimental set of exercises outside the arithmetic generator. Select modes with `numbra challenge --funbox MODES`. Its problems and answer formats may change between releases.
+
+| Mode | Problems | Answer |
+| --- | --- | --- |
+| `fractions` | chains of fractions and decimals, denominators up to 12 | exact value, such as `11/12` or `3.5` |
+| `substitution` | letter expressions with given values, and physics formulas: `F = m * a`, `E = m * g * h` (g = 10), `P = U * I`, `s = v * t`, `p = m * v`, `v = s / t` | whole number |
+| `equations` | linear equations, linear inequalities, and quadratics with integer roots | whole number; `x > 4`; roots as `2, 3` in any order |
+| `logic` | boolean expressions over comparisons | `true` or `false`; `1` and `0` are also accepted |
+| `derivatives` | f′(a) of a polynomial of degree 2 or 3 | whole number |
+| `graphs` | place a point on a line or parabola, or read a line's slope and intercept or a parabola's vertex | `x, y`; `k, b`; `h, k` |
+
+Only `fractions` produces non-integer answers. Answers are case-insensitive for `true` and `false`. Inequalities accept `>`, `<`, `>=`, `<=`, `≥`, and `≤`, with or without `x` and spaces (for example `>4`). Roots and points are typed as a comma-separated list. `graphs` needs the interactive mode, so `numbra challenge` rejects it.
+
+Funbox sessions use the same stages, soft or strict timing, and scoring as ordinary challenges, without operation bonuses. Difficulty changes the number ranges and the number of steps in each mode.
+
 ## Stages and time limits
 
 Stage kinds repeat `slow`, `normal`, `fast` with default limits of 15, 10, and 5 seconds per answer. Stages change the pace, not the difficulty: each stage gets a comparable share of the time budget and problems from the same band. Operation bonuses add time per operation in a problem: 0 s for `+` and `-`, 1 s for `*`, 2 s for `/`, 3 s for `^`.

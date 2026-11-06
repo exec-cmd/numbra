@@ -5,6 +5,7 @@ import math
 import tomllib
 from typing import Any
 
+from ..core.funbox import FunboxMode
 from ..core.models import Difficulty, Operation, StageKind, Topic, parse_operation_selection
 from .defaults import _DEFAULT_DESIGN, _DEFAULT_TEMPLATES, _DEFAULT_TOML
 from .models import ChallengeConfig, DifficultyConfig, OperationTimingConfig, Settings
@@ -97,7 +98,14 @@ def _parse_settings(
         raise ConfigError(
             f"{paths.main.name}: unknown field challenge.{sorted(unknown_challenge)[0]}"
         )
-    unknown_root = set(main) - {"challenge", "timing", "stages", "difficulties", "features"}
+    unknown_root = set(main) - {
+        "challenge",
+        "timing",
+        "stages",
+        "difficulties",
+        "features",
+        "funbox",
+    }
     if unknown_root:
         raise ConfigError(f"{paths.main.name}: unknown field {sorted(unknown_root)[0]}")
     warnings: list[str] = []
@@ -143,6 +151,7 @@ def _parse_settings(
         for legacy in sorted(_LEGACY_DIFFICULTIES.keys() & raw_profiles.keys()):
             warnings.append(f"{paths.main.name}: difficulties.{legacy} is deprecated and ignored")
     features = _parse_features(main.get("features", {}), paths)
+    funbox_modes = _parse_funbox(main.get("funbox", {}), paths)
     timing = _parse_timing(main.get("timing", {}), paths)
     if not isinstance(templates, list) or not all(isinstance(item, str) for item in templates):
         raise ConfigError(f"{paths.templates.name}: expected an array of strings")
@@ -168,6 +177,7 @@ def _parse_settings(
             profiles,
             timing,
             features,
+            funbox_modes=funbox_modes,
         ),
         tuple(templates),
         style_values,
@@ -189,6 +199,28 @@ def _parse_features(value: Any, paths: ConfigPaths) -> dict[Topic, bool]:
             raise ConfigError(f"{paths.main.name}: features.{name} must be a boolean")
         features[Topic(name)] = enabled
     return features
+
+
+def _parse_funbox(value: Any, paths: ConfigPaths) -> tuple[FunboxMode, ...]:
+    if not isinstance(value, dict):
+        raise ConfigError(f"{paths.main.name}: funbox must be a table")
+    if set(value) - {"modes"}:
+        raise ConfigError(
+            f"{paths.main.name}: unknown field funbox.{sorted(set(value) - {'modes'})[0]}"
+        )
+    modes = value.get("modes", [])
+    if not isinstance(modes, list) or not all(isinstance(item, str) for item in modes):
+        raise ConfigError(f"{paths.main.name}: funbox.modes must be an array of strings")
+    parsed = set()
+    for item in modes:
+        try:
+            parsed.add(FunboxMode(item))
+        except ValueError as exc:
+            known = ", ".join(mode.value for mode in FunboxMode)
+            raise ConfigError(
+                f"{paths.main.name}: funbox.modes has unsupported mode '{item}'; use {known}"
+            ) from exc
+    return tuple(mode for mode in FunboxMode if mode in parsed)
 
 
 def _parse_stage_limits(value: Any, paths: ConfigPaths) -> dict[StageKind, float]:

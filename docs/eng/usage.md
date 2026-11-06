@@ -52,6 +52,7 @@ Use `numbra --help`, `numbra --version`, or `numbra challenge --help` for comman
 | `--cooldown SECONDS` | 2 seconds | Pause between examples; accepts 1–3 seconds. |
 | `--advanced` / `--no-advanced` | Saved settings | Enable all operations and advanced topics, or turn off configured advanced topics; `tricks` is unaffected. |
 | `--identities` / `--no-identities` | Saved setting | Independently enable or disable numerical identities. |
+| `--funbox MODES` | Off | Experimental: run only the listed modes, such as `logic,equations`. Cannot be combined with `-o`, `--advanced`, or `--identities`. `graphs` needs the interactive mode and is rejected here. |
 
 For example:
 

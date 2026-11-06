@@ -255,3 +255,24 @@ def test_config_without_tricks_key_loads_with_tricks_off(tmp_path: Path) -> None
 
     assert settings.challenge.features[Topic.TRICKS] is False
     assert settings.warnings == ()
+
+
+def test_funbox_modes_load_in_canonical_order_and_reject_unknown(tmp_path: Path) -> None:
+    from numbra.core.funbox import FunboxMode
+
+    paths = ConfigPaths.from_root(tmp_path)
+    manager = ConfigManager(paths)
+    assert manager.load_or_create().challenge.funbox_modes == ()
+    text = paths.main.read_text(encoding="utf-8")
+    paths.main.write_text(
+        text.replace("modes = []", 'modes = ["logic", "equations"]'), encoding="utf-8"
+    )
+
+    assert manager.load_or_create().challenge.funbox_modes == (
+        FunboxMode.EQUATIONS,
+        FunboxMode.LOGIC,
+    )
+
+    paths.main.write_text(text.replace("modes = []", 'modes = ["nope"]'), encoding="utf-8")
+    with pytest.raises(ConfigError, match=r"numbra\.toml.*funbox\.modes.*nope"):
+        manager.load_or_create()

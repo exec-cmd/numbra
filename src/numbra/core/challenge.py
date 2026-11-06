@@ -10,7 +10,8 @@ from dataclasses import asdict, dataclass
 from decimal import Decimal
 from fractions import Fraction
 
-from ..config import OperationTimingConfig, Settings
+from ..config import ChallengeConfig, OperationTimingConfig, Settings
+from .funbox import FunboxGenerator, FunboxMode
 from .generator import (
     DifficultyProfile,
     GenerationError,
@@ -20,11 +21,13 @@ from .generator import (
 )
 from .models import (
     BASIC_OPERATIONS,
+    Answer,
     Difficulty,
     Operation,
     Problem,
     StageKind,
     Topic,
+    parse_inequality,
     parse_operation_selection,
 )
 from .stages import allocate_stage_kinds
@@ -46,6 +49,7 @@ class ChallengeOptions:
     power: bool | None = None
     identities: bool | None = None
     tricks: bool | None = None
+    funbox: tuple[FunboxMode, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,7 +65,7 @@ class AnswerAttempt:
     stage_number: int
     problem_number: int
     expression: str
-    correct_answer: int | Decimal | Fraction
+    correct_answer: Answer
     user_answer: str | None
     is_correct: bool
     elapsed_seconds: float
@@ -88,6 +92,7 @@ class CompletedTraining:
     generation_version: int = 5
     scoring_version: int = 2
     settings_fingerprint: str = ""
+    mode: str = "challenge"
 
     @property
     def total_examples(self) -> int:
@@ -153,8 +158,10 @@ class TrainingSession:
         topics: tuple[Topic, ...] = (),
         warnings: tuple[str, ...] = (),
         settings_fingerprint: str = "",
+        mode: str = "challenge",
     ) -> None:
         self.topics = topics
+        self.mode = mode
         self.warnings = warnings
         self.settings_fingerprint = settings_fingerprint
         self.generation_version = 5
@@ -241,6 +248,7 @@ class TrainingSession:
             self.cooldown_seconds,
             topics=self.topics,
             settings_fingerprint=self.settings_fingerprint,
+            mode=self.mode,
         )
 
 
@@ -266,51 +274,19 @@ class Challenge:
         difficulty = options.difficulty or config.difficulty
         stages_count = options.stages if options.stages is not None else config.stages
         raw_operations = options.operations if options.operations is not None else config.operations
-        if duration < 1 or stages_count < 1 or not raw_operations:
+        if duration < 1 or stages_count < 1 or (not raw_operations and options.funbox is None):
             raise ValueError("invalid challenge options")
         if not 1.0 <= options.cooldown_seconds <= 3.0:
             raise ValueError("cooldown_seconds must be between 1 and 3")
-        selection = parse_operation_selection(item.value for item in raw_operations)
-        operations: tuple[Operation, ...] = tuple(
-            item
-            for item in selection
-            if isinstance(item, Operation) and item is not Operation.POWER
+        if options.funbox is None:
+            operations, topics = _selection(options, raw_operations, config)
+        else:
+            operations, topics = (), ()
+        funbox = (
+            tuple(mode for mode in FunboxMode if mode in options.funbox)
+            if options.funbox is not None
+            else None
         )
-        selected_topics = {
-            Topic.POWER if item is Operation.POWER else item
-            for item in selection
-            if isinstance(item, Topic) or item is Operation.POWER
-        }
-        features = (
-            dict(config.features)
-            if options.operations is None
-            else {Topic.IDENTITIES: config.features.get(Topic.IDENTITIES, False)}
-        )
-        if options.advanced is not None:
-            # Tricks are chosen only explicitly (-o tricks or [features]), never by --advanced.
-            features = {
-                topic: options.advanced
-                if topic is not Topic.TRICKS
-                else features.get(topic, False) or topic in selected_topics
-                for topic in Topic
-            }
-            if options.advanced:
-                operations = BASIC_OPERATIONS
-        if options.operations is not None or options.advanced is None:
-            features.update({topic: True for topic in selected_topics})
-        # Retain programmatic option compatibility; CLI selection uses -o exclusively.
-        for topic in Topic:
-            selected = getattr(options, topic.value)
-            if selected is not None:
-                features[topic] = selected
-        if Topic.POWER in selected_topics and options.power is False:
-            raise ValueError("--operations power conflicts with power=False")
-        operations = tuple(dict.fromkeys(operations))
-        topics = tuple(topic for topic in Topic if features.get(topic, False))
-        if not operations and not topics and options.operations is None:
-            operations = BASIC_OPERATIONS
-        if not operations and not topics:
-            raise ValueError("at least one operation or topic is required")
         seed = (
             options.seed
             if options.seed is not None
@@ -327,8 +303,12 @@ class Challenge:
         )
 
         def prepare(minutes: int) -> tuple[tuple[StagePlan, ...], tuple[str, ...], bool]:
-            generator = ProblemGenerator(
-                profile, operations, seed, difficulty=difficulty, topics=topics
+            generator: ProblemGenerator | FunboxGenerator = (
+                FunboxGenerator(funbox, difficulty, seed)
+                if funbox is not None
+                else ProblemGenerator(
+                    profile, operations, seed, difficulty=difficulty, topics=topics
+                )
             )
             budget = minutes * 60 / stages_count
             plans = []
@@ -372,19 +352,20 @@ class Challenge:
             raise GenerationError(
                 f"Time budget cannot cover all stages and enabled topics; minimum duration: {recommended} minutes"
             )
+        fingerprint_settings: dict[str, object] = {
+            "profile": asdict(profile),
+            "timing": asdict(config.operation_timing),
+            "limits": config.stage_limits,
+            "topics": [topic.value for topic in topics],
+            "operations": [op.value for op in operations],
+            "generation": 4,
+            "scoring": 2,
+        }
+        if funbox is not None:
+            # Added only for funbox, so ordinary fingerprints stay as they were.
+            fingerprint_settings["funbox"] = [mode.value for mode in funbox]
         fingerprint = hashlib.sha256(
-            json.dumps(
-                {
-                    "profile": asdict(profile),
-                    "timing": asdict(config.operation_timing),
-                    "limits": config.stage_limits,
-                    "topics": [topic.value for topic in topics],
-                    "operations": [op.value for op in operations],
-                    "generation": 4,
-                    "scoring": 2,
-                },
-                sort_keys=True,
-            ).encode()
+            json.dumps(fingerprint_settings, sort_keys=True).encode()
         ).hexdigest()
         return TrainingSession(
             started_at=self.wall_clock(),
@@ -401,10 +382,60 @@ class Challenge:
             topics=topics,
             warnings=warnings,
             settings_fingerprint=fingerprint,
+            mode="challenge" if funbox is None else "funbox",
         )
 
 
+def _selection(
+    options: ChallengeOptions,
+    raw_operations: tuple[Operation | Topic, ...],
+    config: ChallengeConfig,
+) -> tuple[tuple[Operation, ...], tuple[Topic, ...]]:
+    selection = parse_operation_selection(item.value for item in raw_operations)
+    operations: tuple[Operation, ...] = tuple(
+        item for item in selection if isinstance(item, Operation) and item is not Operation.POWER
+    )
+    selected_topics = {
+        Topic.POWER if item is Operation.POWER else item
+        for item in selection
+        if isinstance(item, Topic) or item is Operation.POWER
+    }
+    features = (
+        dict(config.features)
+        if options.operations is None
+        else {Topic.IDENTITIES: config.features.get(Topic.IDENTITIES, False)}
+    )
+    if options.advanced is not None:
+        # Tricks are chosen only explicitly (-o tricks or [features]), never by --advanced.
+        features = {
+            topic: options.advanced
+            if topic is not Topic.TRICKS
+            else features.get(topic, False) or topic in selected_topics
+            for topic in Topic
+        }
+        if options.advanced:
+            operations = BASIC_OPERATIONS
+    if options.operations is not None or options.advanced is None:
+        features.update({topic: True for topic in selected_topics})
+    # Retain programmatic option compatibility; CLI selection uses -o exclusively.
+    for topic in Topic:
+        selected = getattr(options, topic.value)
+        if selected is not None:
+            features[topic] = selected
+    if Topic.POWER in selected_topics and options.power is False:
+        raise ValueError("--operations power conflicts with power=False")
+    operations = tuple(dict.fromkeys(operations))
+    topics = tuple(topic for topic in Topic if features.get(topic, False))
+    if not operations and not topics and options.operations is None:
+        operations = BASIC_OPERATIONS
+    if not operations and not topics:
+        raise ValueError("at least one operation or topic is required")
+    return operations, topics
+
+
 def _problem_bonus(problem: Problem, timing: OperationTimingConfig) -> float:
+    if problem.family == "funbox":
+        return 0.0
     if not timing.enabled:
         return 0.0
     bonus = timing.bonus_for(problem.operations) + max(0, complexity_score(problem) - 4)
@@ -420,12 +451,34 @@ def _problem_bonus(problem: Problem, timing: OperationTimingConfig) -> float:
     return bonus + visit(problem.as_tree())
 
 
-def _matches_answer(value: str, expected: int | Decimal | Fraction) -> bool:
+_NUMBER = re.compile(
+    r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]{1,3})?"
+    r"|[+-]?[0-9]+\s*/\s*[+-]?[0-9]+"
+)
+
+
+def _numbers(value: str) -> tuple[Fraction, ...]:
+    """Numbers separated by commas, semicolons or spaces, with optional surrounding brackets."""
+    tokens = [token for token in re.split(r"[\s,;]+", value.strip().strip("()[]")) if token]
+    if not all(_NUMBER.fullmatch(token) for token in tokens):
+        raise ValueError("not a list of numbers")
+    return tuple(Fraction(token) for token in tokens)
+
+
+def _matches_answer(value: str, expected: Answer) -> bool:
     try:
-        if len(value) > 128 or not re.fullmatch(
-            r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]{1,3})?|[+-]?[0-9]+\s*/\s*[+-]?[0-9]+",
-            value,
-        ):
+        if len(value) > 128:
+            return False
+        if isinstance(expected, bool):
+            return value.strip().casefold() in (("1", "true") if expected else ("0", "false"))
+        if isinstance(expected, str):
+            parsed = parse_inequality(value)
+            return parsed is not None and parsed == parse_inequality(expected)
+        if isinstance(expected, frozenset):
+            return frozenset(_numbers(value)) == expected
+        if isinstance(expected, tuple):
+            return _numbers(value) == expected
+        if not _NUMBER.fullmatch(value):
             return False
         return Fraction(value) == Fraction(expected)
     except Exception:

@@ -353,3 +353,48 @@ def test_sparkline_maps_scores_to_block_characters() -> None:
     cli_module = importlib.import_module("numbra.cli.app")
 
     assert cli_module._sparkline([0.0, 0.5, 1.0, 2.0, -1.0]) == "▁▅██▁"
+
+
+def _compact(text: str) -> str:
+    return re.sub(r"\s+", "", text)
+
+
+def test_funbox_graphs_requires_the_interactive_mode() -> None:
+    result = runner.invoke(app, ["challenge", "--funbox", "logic,graphs"])
+    assert result.exit_code == 2
+    assert _compact("graphs requires the interactive mode (run `numbra`)") in _compact(
+        result.stdout
+    )
+
+
+def test_funbox_rejects_unknown_modes_and_ordinary_selection() -> None:
+    unknown = runner.invoke(app, ["challenge", "--funbox", "nope"])
+    assert unknown.exit_code == 2
+    assert _compact("unsupported funbox mode 'nope'") in _compact(unknown.stdout)
+
+    combined = runner.invoke(app, ["challenge", "--funbox", "logic", "-o", "+"])
+    assert combined.exit_code == 2
+    assert _compact("cannot be combined with -o") in _compact(combined.stdout)
+
+
+def test_funbox_challenge_runs_a_short_session(monkeypatch) -> None:
+    cli_module = importlib.import_module("numbra.cli.app")
+
+    async def fake_prompt(*args, **kwargs):
+        return "true"
+
+    async def no_cooldown(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(cli_module, "timed_prompt", fake_prompt)
+    monkeypatch.setattr(cli_module, "cooldown", no_cooldown)
+    result = runner.invoke(
+        app, ["challenge", "--funbox", "logic", "-t", "1", "-n", "1", "--cooldown", "1"]
+    )
+
+    assert result.exit_code == 0, result.stdout
+    output = re.sub(r"\s+", " ", result.stdout)
+    assert "Funbox (experimental): logic" in output
+    assert re.search(r"Correct|Incorrect", output)
+    assert "Previous comparable" not in output
+    assert "Recommendation" not in output

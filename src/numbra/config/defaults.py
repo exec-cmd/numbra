@@ -12,6 +12,9 @@ power = false
 identities = false
 tricks = false
 
+[funbox]
+modes = []
+
 [timing]
 operation_bonus_enabled = true
 [timing.operation_bonus_seconds]

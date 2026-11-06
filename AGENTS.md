@@ -64,6 +64,7 @@ Treat these as contracts unless the task explicitly changes them:
 - Maximum problem score is complexity-calibrated: `1 + 0.2 * max(0, complexity_score - 3)`. Grades use the existing S/A/B/C/D thresholds.
 - Cooldown defaults to two seconds and accepts values from one through three seconds.
 - The `tricks` topic is off by default, selected only through `-o tricks` or `[features] tricks`, and never toggled by `--advanced`/`--no-advanced`. Each trick problem is a single trick with explicit work units from `core/tricks.py`; tricks use `TRICK_MAX_RESULT` (easy 400, normal 2,500, hard 10,000) instead of the profile `max_result`, rotate by strategy, and stay outside operation balance.
+- Funbox is experimental and selected only by `numbra challenge --funbox MODES`; the `[funbox] modes` setting is validated but does not start a session. Its modes are `fractions`, `substitution`, `equations`, `logic`, `graphs`, and `derivatives`; only `fractions` gives non-integer answers; `graphs` is TUI-only; funbox results stay outside records, the recommendation, comparable history, and the streak.
 - Cancelling a challenge does not save a partial session. Only completed training is persisted.
 - Progress groups (records, recommendation) match difficulty, strict mode, operations, and topics, and ignore duration, stage count, and generator/scoring versions. `Previous comparable` stays an exact match. A day streak counts local dates with a completed training and survives until the end of the next day. The recommendation never suggests a level above `hard`.
 

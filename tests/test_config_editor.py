@@ -128,3 +128,12 @@ def test_unset_missing_key_is_a_no_op(paths: ConfigPaths) -> None:
     unset_value(paths, "challenge.seed")
 
     assert paths.main.read_text(encoding="utf-8") == before
+
+
+def test_funbox_modes_are_listed_and_validated_on_write(paths: ConfigPaths) -> None:
+    assert dict(list_values(paths))["funbox.modes"] == []
+    set_value(paths, "funbox.modes", '["logic"]')
+    assert get_value(paths, "funbox.modes") == ["logic"]
+    with pytest.raises(ConfigError, match=r"funbox\.modes"):
+        set_value(paths, "funbox.modes", '["nope"]')
+    assert get_value(paths, "funbox.modes") == ["logic"]

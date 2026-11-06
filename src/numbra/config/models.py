@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ..core.funbox import FunboxMode
 from ..core.models import Difficulty, Operation, StageKind, Topic
 
 
@@ -67,6 +68,7 @@ class ChallengeConfig:
         )
     )
     features: dict[Topic, bool] = field(default_factory=_default_features)
+    funbox_modes: tuple[FunboxMode, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

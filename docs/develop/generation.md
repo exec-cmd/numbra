@@ -37,6 +37,10 @@ The target level comes from `_next_level()`: a seeded, shuffled cycle over the b
 
 `core/tricks.py` assigns work units per trick (a trick makes large-looking numbers cheap), so `complexity_score` reads `problem.work_units` instead of running the heuristic. The generator uses `TRICK_MAX_RESULT[difficulty]` for the trick pool, and `trick_levels()` derives the level column of `numbra tricks` from the same bands. A new trick needs a `TRICKS` entry, catalog problems, and a test in `tests/test_tricks.py` that checks the example and each level it appears on.
 
+## Funbox
+
+`core/funbox/` holds one module per mode, each with `make(rng, difficulty, units)` returning a `Problem` with `family="funbox"`, `tree=None`, `operations=()`, and `work_units` set to the drawn unit. `FunboxGenerator` has the `ProblemGenerator` surface that `Challenge.create_session` calls (`generate_many`, `start_stage`, `warnings`). Modes rotate by least-used count, and uniqueness is by display text: `canonical_problem_key` returns `("funbox", expression)`, because funbox texts are not arithmetic trees. After 50 failed draws a repeat is accepted and one warning is added. Funbox problems get no operation bonus (`_problem_bonus` returns 0), and their answers are `Answer` values rendered by `format_answer` (`core/models.py`) and matched by `_matches_answer` (`core/challenge.py`). The settings fingerprint gains a `funbox` key only for funbox sessions, so ordinary fingerprints do not change.
+
 ## Versions
 
 Generated sequences and scores are stamped with `generation_version` and `scoring_version`, and `comparable_history` only matches equal stamps. Any change that alters the sequence for a seed or the score for an attempt needs a bump. The literals currently live in several places in `core/challenge.py` (`CompletedTraining` defaults, `TrainingSession.__init__`, and `"generation"`/`"scoring"` inside the settings fingerprint); change them together and confirm with a grep for `generation`.

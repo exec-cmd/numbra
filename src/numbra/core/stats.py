@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .challenge import AnswerAttempt, CompletedTraining
 from .db.schema import SCHEMA
-from .models import Difficulty
+from .models import Difficulty, format_answer
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,7 +271,7 @@ class Stats:
                             stage_id,
                             attempt.problem_number,
                             attempt.expression,
-                            str(attempt.correct_answer),
+                            format_answer(attempt.correct_answer),
                             attempt.user_answer,
                             int(attempt.is_correct),
                             attempt.elapsed_seconds,
