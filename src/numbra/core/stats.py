@@ -79,7 +79,7 @@ class AttemptRecord:
 
 @dataclass(frozen=True, slots=True)
 class GroupStats:
-    """Attempts in one group; kind is difficulty, operation, topic or trick."""
+    """Attempts in one group; kind is difficulty, operation, topic, trick or funbox mode."""
 
     kind: str
     name: str
@@ -101,19 +101,22 @@ class Breakdown:
 
 # Completed trainings with the mean time of their correct answers (NULL when none).
 # One grouped pass over attempts; a correlated subquery rescans them per training.
-_COMPLETED = (
+_COMPLETED_BASE = (
     "SELECT t.*, c.average_correct FROM trainings t LEFT JOIN ("
     "SELECT s.training_id, AVG(a.elapsed) AS average_correct FROM attempts a "
     "JOIN stages s ON s.id = a.stage_id WHERE a.is_correct = 1 GROUP BY s.training_id"
     ") c ON c.training_id = t.id WHERE t.status = 'completed' "
 )
+# Funbox sessions are kept out of every ordinary query; only funbox_* methods read them.
+_COMPLETED = _COMPLETED_BASE + "AND t.mode = 'challenge' "
+_FUNBOX_COMPLETED = _COMPLETED_BASE + "AND t.mode = 'funbox' "
 
-# Attempts of completed trainings per group key; _group_stats splits them by kind.
+# Attempts of completed challenges per group key; _group_stats splits them by kind.
 _ATTEMPT_GROUPS = (
     "SELECT t.difficulty, a.operations, a.topics, a.strategy, a.is_correct, "
     "COUNT(*) AS total, SUM(a.elapsed) AS seconds FROM attempts a "
     "JOIN stages s ON s.id = a.stage_id JOIN trainings t ON t.id = s.training_id "
-    "WHERE t.status = 'completed' "
+    "WHERE t.status = 'completed' AND t.mode = 'challenge' "
     "GROUP BY t.difficulty, a.operations, a.topics, a.strategy, a.is_correct"
 )
 
@@ -207,6 +210,17 @@ class Stats:
                 if name not in attempt_columns:
                     connection.execute(f"ALTER TABLE attempts ADD COLUMN {name} {definition}")
             connection.execute("PRAGMA user_version = 2")
+            version = 2
+
+        if version == 2:
+            training_columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(trainings)")
+            }
+            if "mode" not in training_columns:
+                connection.execute(
+                    "ALTER TABLE trainings ADD COLUMN mode TEXT NOT NULL DEFAULT 'challenge'"
+                )
+            connection.execute("PRAGMA user_version = 3")
 
     def save(self, training: CompletedTraining) -> int:
         with self._connect() as connection:
@@ -214,8 +228,8 @@ class Stats:
                 "INSERT INTO trainings (started_at, status, difficulty, seed, operations, "
                 "target_seconds, actual_seconds, stages, total_examples, correct_answers, "
                 "timeouts, average_response, strict_mode, cooldown_seconds, score, max_score, "
-                "topics, generation_version, scoring_version, settings_fingerprint) "
-                "VALUES (?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "topics, generation_version, scoring_version, settings_fingerprint, mode) "
+                "VALUES (?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     training.started_at,
                     training.difficulty.value,
@@ -236,6 +250,7 @@ class Stats:
                     training.generation_version,
                     training.scoring_version,
                     training.settings_fingerprint,
+                    training.mode,
                 ),
             )
             if cursor.lastrowid is None:
@@ -366,23 +381,24 @@ class Stats:
             row = connection.execute(
                 "SELECT COUNT(*) AS trainings, COALESCE(SUM(total_examples), 0) AS examples, "
                 "COALESCE(SUM(correct_answers), 0) AS correct, COALESCE(SUM(timeouts), 0) "
-                "AS timeouts FROM trainings WHERE status = 'completed'"
+                "AS timeouts FROM trainings WHERE status = 'completed' AND mode = 'challenge'"
             ).fetchone()
             average_row = connection.execute(
                 "SELECT COALESCE(AVG(a.elapsed), 0) AS average FROM attempts a "
                 "JOIN stages s ON s.id = a.stage_id JOIN trainings t ON t.id = s.training_id "
-                "WHERE t.status = 'completed' AND a.timed_out = 0"
+                "WHERE t.status = 'completed' AND t.mode = 'challenge' AND a.timed_out = 0"
             ).fetchone()
             operation_rows = connection.execute(
                 "SELECT a.operations, a.topics, a.is_correct, COUNT(*) AS total FROM attempts a "
                 "JOIN stages s ON s.id = a.stage_id "
-                "JOIN trainings t ON t.id = s.training_id WHERE t.status = 'completed' "
+                "JOIN trainings t ON t.id = s.training_id "
+                "WHERE t.status = 'completed' AND t.mode = 'challenge' "
                 "GROUP BY a.operations, a.topics, a.is_correct"
             ).fetchall()
             difficulty_rows = connection.execute(
                 "SELECT difficulty, COALESCE(SUM(total_examples), 0) AS total, "
                 "COALESCE(SUM(correct_answers), 0) AS correct FROM trainings "
-                "WHERE status = 'completed' GROUP BY difficulty"
+                "WHERE status = 'completed' AND mode = 'challenge' GROUP BY difficulty"
             ).fetchall()
         accuracy = row["correct"] / row["examples"] if row["examples"] else 0.0
         operation_totals: dict[str, list[int]] = {}
@@ -499,7 +515,8 @@ class Stats:
                 "AVG(CASE WHEN a.is_correct = 1 THEN a.elapsed END) AS average_correct "
                 "FROM attempts a JOIN stages s ON s.id = a.stage_id "
                 "JOIN trainings t ON t.id = s.training_id "
-                "WHERE t.status = 'completed' AND a.topics LIKE '%\"tricks\"%' "
+                "WHERE t.status = 'completed' AND t.mode = 'challenge' "
+                "AND a.topics LIKE '%\"tricks\"%' "
                 "GROUP BY a.strategy ORDER BY attempts DESC, a.strategy"
             ).fetchall()
         return [
@@ -507,11 +524,38 @@ class Stats:
             for row in rows
         ]
 
+    def funbox_history(self, limit: int = 10) -> list[TrainingRecord]:
+        """Completed funbox sessions, newest first."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                _FUNBOX_COMPLETED + "ORDER BY started_at DESC LIMIT ?",
+                (max(0, limit),),
+            ).fetchall()
+        return [_training_record(row) for row in rows]
+
+    def funbox_stats(self) -> list[GroupStats]:
+        """Attempts of completed funbox sessions per mode, in mode name order."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT a.strategy, COUNT(*) AS attempts, SUM(a.is_correct) AS correct, "
+                "AVG(CASE WHEN a.is_correct = 1 THEN a.elapsed END) AS average_correct "
+                "FROM attempts a JOIN stages s ON s.id = a.stage_id "
+                "JOIN trainings t ON t.id = s.training_id "
+                "WHERE t.status = 'completed' AND t.mode = 'funbox' "
+                "GROUP BY a.strategy ORDER BY a.strategy"
+            ).fetchall()
+        return [
+            GroupStats(
+                "mode", row["strategy"], row["attempts"], row["correct"], row["average_correct"]
+            )
+            for row in rows
+        ]
+
     def streak(self, today: date) -> tuple[int, int]:
         """Current and best runs of consecutive local days with a completed training."""
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT started_at FROM trainings WHERE status = 'completed'"
+                "SELECT started_at FROM trainings WHERE status = 'completed' AND mode = 'challenge'"
             ).fetchall()
         days = {datetime.fromtimestamp(row["started_at"]).date() for row in rows}
         best = run = 0

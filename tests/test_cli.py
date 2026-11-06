@@ -398,3 +398,28 @@ def test_funbox_challenge_runs_a_short_session(monkeypatch) -> None:
     assert re.search(r"Correct|Incorrect", output)
     assert "Previous comparable" not in output
     assert "Recommendation" not in output
+
+
+def test_results_lists_funbox_in_its_own_table(monkeypatch) -> None:
+    cli_module = importlib.import_module("numbra.cli.app")
+
+    async def fake_prompt(*args, **kwargs):
+        return ""
+
+    async def no_cooldown(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(cli_module, "timed_prompt", fake_prompt)
+    monkeypatch.setattr(cli_module, "cooldown", no_cooldown)
+    run = runner.invoke(
+        app, ["challenge", "--funbox", "logic", "-t", "1", "-n", "1", "--cooldown", "1"]
+    )
+    assert run.exit_code == 0, run.stdout
+
+    result = runner.invoke(app, ["results"])
+
+    assert result.exit_code == 0
+    output = re.sub(r"\s+", " ", result.stdout)
+    assert "No completed challenges yet." in output
+    assert "Funbox (experimental)" in output
+    assert "logic" in output

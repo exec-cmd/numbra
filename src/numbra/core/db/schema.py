@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS trainings (
     strict_mode INTEGER NOT NULL DEFAULT 0, cooldown_seconds REAL NOT NULL DEFAULT 2,
     score REAL NOT NULL DEFAULT 0, max_score REAL NOT NULL DEFAULT 0,
     topics TEXT NOT NULL DEFAULT '[]', generation_version INTEGER NOT NULL DEFAULT 1,
-    scoring_version INTEGER NOT NULL DEFAULT 1, settings_fingerprint TEXT NOT NULL DEFAULT ''
+    scoring_version INTEGER NOT NULL DEFAULT 1, settings_fingerprint TEXT NOT NULL DEFAULT '',
+    mode TEXT NOT NULL DEFAULT 'challenge'
 );
 CREATE TABLE IF NOT EXISTS stages (
     id INTEGER PRIMARY KEY AUTOINCREMENT, training_id INTEGER NOT NULL,

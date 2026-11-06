@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from contextlib import closing
 from dataclasses import replace
+from datetime import datetime
 from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
@@ -221,6 +222,58 @@ def test_stats_saves_and_aggregates_completed_training(tmp_path: Path) -> None:
     assert aggregate.completed_trainings == 1
     assert aggregate.total_examples == completed.total_examples
     assert aggregate.correct_answers == 1
+
+
+def _funbox_training(started_at: float) -> CompletedTraining:
+    """Same settings as _training, but one problem with no arithmetic operation or topic."""
+    base = _training(started_at=started_at, topics=())
+    problem = replace(base.stages[0].problems[0], family="funbox", strategy="logic", operations=())
+    return replace(base, mode="funbox", stages=(replace(base.stages[0], problems=(problem,)),))
+
+
+def test_funbox_sessions_stay_out_of_challenge_results(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "history.sqlite3")
+    _save_outcomes(stats, [(True, 1.0), (False, 3.0)], topics=())
+    funbox_start = 100.0 + 10 * 86400
+    stats.save(_funbox_training(funbox_start))
+    with closing(sqlite3.connect(tmp_path / "history.sqlite3")) as connection:
+        modes = connection.execute("SELECT mode FROM trainings ORDER BY id").fetchall()
+    assert modes == [("challenge",), ("funbox",)]
+
+    challenge = _training(topics=())
+    assert [record.started_at for record in stats.history()] == [100.0]
+    assert [record.started_at for record in stats.funbox_history()] == [funbox_start]
+    assert stats.aggregate().completed_trainings == 1
+    assert stats.aggregate().total_examples == 2
+    assert [record.started_at for record in stats.comparable_history(challenge, 10)] == [100.0]
+    assert len(stats.progress_history(challenge)) == 1
+    assert [record.sessions for record in stats.records()] == [1]
+    assert sum(group.attempts for group in stats.breakdown().operations) == 2
+    assert stats.trick_stats() == []
+    assert stats.streak(datetime.fromtimestamp(funbox_start).date()) == (0, 1)
+
+
+def test_funbox_stats_group_attempts_by_mode(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "history.sqlite3")
+    stats.save(_funbox_training(100.0))
+    stats.save(_funbox_training(200.0))
+
+    groups = stats.funbox_stats()
+
+    assert [(group.kind, group.name, group.attempts, group.correct) for group in groups] == [
+        ("mode", "logic", 2, 2)
+    ]
+    assert groups[0].average_correct_seconds == 0.5
+
+
+def test_reset_clears_funbox_sessions_too(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "history.sqlite3")
+    stats.save(_funbox_training(100.0))
+
+    stats.reset()
+
+    assert stats.funbox_history() == []
+    assert stats.funbox_stats() == []
 
 
 def test_stats_reset_removes_history_but_keeps_schema(tmp_path: Path) -> None:

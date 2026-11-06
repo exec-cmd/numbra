@@ -55,7 +55,7 @@ def test_v0_migration_preserves_rows_and_adds_v2_defaults(tmp_path: Path) -> Non
         attempt = connection.execute(
             "SELECT operations, topics, work_units, strategy FROM attempts WHERE id = 1"
         ).fetchone()
-    assert version == 2
+    assert version == 3
     assert training == (1.0, 1.0, "[]", 1, 1, "")
     assert attempt == ('["+"]', "[]", 0, "")
     assert len(stats.history()) == 1
@@ -87,6 +87,47 @@ def test_v1_migration_does_not_rewrite_legacy_scores_and_is_idempotent(
     with sqlite3.connect(database) as connection:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
         score = connection.execute("SELECT score, max_score FROM trainings WHERE id = 1").fetchone()
-    assert version == 2
+    assert version == 3
     assert score == (0.375, 4.5)
     assert len(stats.history()) == 1
+
+
+def _create_v2_database(path: Path) -> None:
+    _create_v0_database(path)
+    with sqlite3.connect(path) as connection:
+        connection.executescript(
+            """
+            ALTER TABLE trainings ADD COLUMN strict_mode INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE trainings ADD COLUMN cooldown_seconds REAL NOT NULL DEFAULT 2;
+            ALTER TABLE trainings ADD COLUMN score REAL NOT NULL DEFAULT 0;
+            ALTER TABLE trainings ADD COLUMN max_score REAL NOT NULL DEFAULT 0;
+            ALTER TABLE trainings ADD COLUMN topics TEXT NOT NULL DEFAULT '[]';
+            ALTER TABLE trainings ADD COLUMN generation_version INTEGER NOT NULL DEFAULT 1;
+            ALTER TABLE trainings ADD COLUMN scoring_version INTEGER NOT NULL DEFAULT 1;
+            ALTER TABLE trainings ADD COLUMN settings_fingerprint TEXT NOT NULL DEFAULT '';
+            ALTER TABLE attempts ADD COLUMN operations TEXT NOT NULL DEFAULT '[]';
+            ALTER TABLE attempts ADD COLUMN overtime REAL NOT NULL DEFAULT 0;
+            ALTER TABLE attempts ADD COLUMN score REAL NOT NULL DEFAULT 0;
+            ALTER TABLE attempts ADD COLUMN topics TEXT NOT NULL DEFAULT '[]';
+            ALTER TABLE attempts ADD COLUMN work_units INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE attempts ADD COLUMN strategy TEXT NOT NULL DEFAULT '';
+            PRAGMA user_version = 2;
+            """
+        )
+
+
+def test_v2_migration_adds_mode_defaulting_rows_to_challenge(tmp_path: Path) -> None:
+    database = tmp_path / "v2.sqlite3"
+    _create_v2_database(database)
+
+    stats = Stats(database)
+    Stats(database)
+
+    with sqlite3.connect(database) as connection:
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        columns = [row[1] for row in connection.execute("PRAGMA table_info(trainings)")]
+        mode = connection.execute("SELECT mode FROM trainings WHERE id = 1").fetchone()
+    assert version == 3
+    assert columns.count("mode") == 1
+    assert mode == ("challenge",)
+    assert [record.identifier for record in stats.history()] == [1]

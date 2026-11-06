@@ -87,8 +87,9 @@ A progress group is difficulty, strict or soft mode, and the selected operations
 - `Breakdown` — attempts, accuracy, and average time of correct answers by difficulty, operation, and topic.
 - `Weak spots` — shown only when some operation, topic, or trick has at least five attempts. It lists the three groups with the lowest accuracy; ties go to the group with the slower correct answers.
 - `Personal records` — one row per progress group, and, once you have trained with `tricks`, a `Tricks` table with attempts, accuracy, and average correct time for each trick.
+- `Funbox (experimental)` — shown only after funbox sessions, with attempts, accuracy, and average correct time for each mode. Funbox results are not part of the other tables, records, the streak, or comparisons.
 
-To clear saved results, run `numbra results --reset` and confirm the prompt. For a script, add `--yes` to skip confirmation. Reset removes training history, records, and streaks.
+To clear saved results, run `numbra results --reset` and confirm the prompt. For a script, add `--yes` to skip confirmation. Reset removes training history, records, streaks, and funbox results.
 
 ## Change saved settings
 

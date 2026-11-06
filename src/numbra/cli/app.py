@@ -403,8 +403,11 @@ def results(
         console.print("All challenge results were deleted.")
         return
     rows = stats.history(limit)
+    funbox = _funbox_table(stats)
     if not rows:
         console.print("No completed challenges yet.")
+        if funbox is not None:
+            console.print(funbox)
         return
     aggregate = stats.aggregate()
     current, longest = stats.streak(date.today())
@@ -485,6 +488,25 @@ def results(
                 else f"{item.average_correct_seconds:.2f}s",
             )
         console.print(trick_table)
+    if funbox is not None:
+        console.print(funbox)
+
+
+def _funbox_table(stats: Stats) -> Table | None:
+    groups = stats.funbox_stats()
+    if not groups:
+        return None
+    table = Table(title="Funbox (experimental)")
+    for heading in ("Mode", "Attempts", "Accuracy", "Avg correct"):
+        table.add_column(heading)
+    for item in groups:
+        table.add_row(
+            item.name,
+            str(item.attempts),
+            f"{item.accuracy:.1%}",
+            _seconds(item.average_correct_seconds),
+        )
+    return table
 
 
 config_app = typer.Typer(
