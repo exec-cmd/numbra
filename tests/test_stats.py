@@ -19,7 +19,7 @@ from numbra.core.challenge import (
 )
 from numbra.core.generator import complexity_score
 from numbra.core.models import Difficulty, Operation, Problem, StageKind, Topic
-from numbra.core.stats import Stats
+from numbra.core.stats import AttemptRecord, Breakdown, GroupStats, Stats
 
 
 def test_stats_closes_every_connection(tmp_path: Path, monkeypatch) -> None:
@@ -288,3 +288,147 @@ def test_comparable_history_matches_contract_and_ignores_seed(tmp_path: Path) ->
     rows = stats.comparable_history(candidate, limit=10)
 
     assert [row.started_at for row in rows] == [101.0]
+
+
+def _save_outcomes(
+    stats: Stats,
+    outcomes: list[tuple[bool, float]],
+    *,
+    difficulty: Difficulty = Difficulty.NORMAL,
+    operation: Operation = Operation.DIVIDE,
+    topics: tuple[Topic, ...] = (),
+    strategy: str = "",
+) -> None:
+    base = _training(topics=topics)
+    problem = replace(
+        base.stages[0].problems[0], operations=(operation,), topics=topics, strategy=strategy
+    )
+    stage = StagePlan(1, StageKind.NORMAL, 30.0, (problem,) * len(outcomes))
+    attempts = tuple(
+        replace(
+            base.attempts[0], problem_number=number, is_correct=correct, elapsed_seconds=elapsed
+        )
+        for number, (correct, elapsed) in enumerate(outcomes, start=1)
+    )
+    stats.save(
+        replace(
+            base,
+            difficulty=difficulty,
+            operations=(operation,),
+            stages=(stage,),
+            attempts=attempts,
+        )
+    )
+
+
+def test_attempts_lists_one_training_in_stage_and_example_order(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "attempts.sqlite3")
+    training = _training()
+    problem = training.stages[0].problems[0]
+    second_stage = StagePlan(2, StageKind.FAST, 10.0, (problem, problem))
+    base = training.attempts[0]
+    attempts = (
+        replace(base, stage_number=2, problem_number=2, expression="second"),
+        replace(base, stage_number=2, problem_number=1, expression="first"),
+        base,
+    )
+    stats.save(replace(training, stages=(training.stages[0], second_stage), attempts=attempts))
+    stats.save(_training(started_at=200.0))
+    identifier = next(row.identifier for row in stats.history() if row.started_at == 100.0)
+
+    rows = stats.attempts(identifier)
+
+    assert [(row.stage_number, row.kind, row.number, row.expression) for row in rows] == [
+        (1, "normal", 1, "3 / 2"),
+        (2, "fast", 1, "first"),
+        (2, "fast", 2, "second"),
+    ]
+    assert rows[0] == AttemptRecord(
+        1,
+        "normal",
+        1,
+        "3 / 2",
+        "3/2",
+        "3/2",
+        True,
+        0.5,
+        False,
+        0.75,
+        "fraction division",
+        ("power",),
+    )
+
+
+def test_breakdown_averages_correct_answers_only(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "breakdown.sqlite3")
+    _save_outcomes(stats, [(True, 1.0), (True, 3.0), (False, 9.0)], topics=(Topic.POWER,))
+    _save_outcomes(
+        stats, [(False, 2.0), (False, 4.0)], difficulty=Difficulty.HARD, operation=Operation.ADD
+    )
+
+    breakdown = stats.breakdown()
+
+    assert [row.name for row in breakdown.difficulties] == ["normal", "hard"]
+    assert breakdown.difficulties[0] == GroupStats("difficulty", "normal", 3, 2, 2.0)
+    assert breakdown.difficulties[1] == GroupStats("difficulty", "hard", 2, 0, None)
+    assert breakdown.operations == (
+        GroupStats("operation", "+", 2, 0, None),
+        GroupStats("operation", "/", 3, 2, 2.0),
+    )
+    assert breakdown.operations[1].accuracy == pytest.approx(2 / 3)
+    assert breakdown.topics == (GroupStats("topic", "power", 3, 2, 2.0),)
+
+
+def test_breakdown_and_weak_spots_are_empty_without_history(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "empty.sqlite3")
+
+    assert stats.breakdown() == Breakdown((), (), ())
+    assert stats.weak_spots() == []
+    assert stats.attempts(1) == []
+
+
+def test_weak_spots_apply_threshold_and_rank_by_accuracy_then_time(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "weak.sqlite3")
+    _save_outcomes(stats, [(True, 2.0)] + [(False, 1.0)] * 4, operation=Operation.MULTIPLY)
+    _save_outcomes(stats, [(True, 4.0)] + [(False, 1.0)] * 4, operation=Operation.ADD)
+    _save_outcomes(stats, [(True, 1.0)] * 4 + [(False, 1.0)], operation=Operation.SUBTRACT)
+    _save_outcomes(stats, [(False, 1.0)] * 4, operation=Operation.DIVIDE)
+
+    assert [(row.name, row.attempts) for row in stats.weak_spots()] == [
+        ("+", 5),
+        ("*", 5),
+        ("-", 5),
+    ]
+    assert [row.name for row in stats.weak_spots(min_attempts=4)] == ["/", "+", "*"]
+    assert [row.name for row in stats.weak_spots(limit=1)] == ["+"]
+
+
+def test_weak_spots_include_trick_strategies(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "tricks.sqlite3")
+    _save_outcomes(
+        stats,
+        [(False, 1.0)] * 5,
+        operation=Operation.MULTIPLY,
+        topics=(Topic.TRICKS,),
+        strategy="times-11",
+    )
+
+    assert GroupStats("trick", "times-11", 5, 0, None) in stats.weak_spots()
+
+
+def test_weak_spots_skip_flawless_groups_and_the_tricks_topic(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "flawless.sqlite3")
+    _save_outcomes(stats, [(True, 1.0)] * 5, operation=Operation.ADD)
+    _save_outcomes(
+        stats,
+        [(False, 1.0)] * 5,
+        operation=Operation.MULTIPLY,
+        topics=(Topic.TRICKS,),
+        strategy="times-11",
+    )
+
+    names = [(row.kind, row.name) for row in stats.weak_spots(limit=10)]
+
+    assert ("operation", "+") not in names
+    assert ("topic", "tricks") not in names
+    assert ("trick", "times-11") in names

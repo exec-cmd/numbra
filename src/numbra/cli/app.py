@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Annotated, NoReturn
 
@@ -35,7 +36,7 @@ from ..core.challenge import (
 from ..core.generator import trick_levels
 from ..core.models import Difficulty, Operation, StageKind, Topic, parse_operation_selection
 from ..core.report import Recommendation, TrainingReport, build_report
-from ..core.stats import Stats
+from ..core.stats import GroupStats, Stats
 from ..core.tricks import TRICKS
 from .input import cooldown, timed_prompt
 from .logging import configure_logging
@@ -302,6 +303,44 @@ def _days(count: int) -> str:
     return f"{count} day" if count == 1 else f"{count} days"
 
 
+_SPARK_LEVELS = "▁▂▃▄▅▆▇█"
+_GRADE_STYLES = {"S": "bold green", "A": "green", "B": "cyan", "C": "yellow", "D": "red"}
+
+
+def _sparkline(values: list[float]) -> str:
+    """Scores from 0 to 1 as block characters."""
+    return "".join(_SPARK_LEVELS[min(7, max(0, round(value * 7)))] for value in values)
+
+
+def _grade_markup(score_percent: float) -> str:
+    grade = grade_for_score(score_percent)
+    return f"[{_GRADE_STYLES[grade]}]{grade}[/]"
+
+
+def _seconds(value: float | None) -> str:
+    return "—" if value is None else f"{value:.2f}s"
+
+
+def _group_table(title: str, sections: Sequence[Sequence[GroupStats]]) -> Table:
+    table = Table(title=title)
+    table.add_column("Group", no_wrap=True)
+    for heading in ("Attempts", "Accuracy", "Avg correct"):
+        table.add_column(heading, justify="right")
+    for section in sections:
+        if not section:
+            continue
+        if table.row_count:
+            table.add_section()
+        for item in section:
+            table.add_row(
+                f"{item.kind}: {item.name}",
+                str(item.attempts),
+                f"{item.accuracy:.1%}",
+                _seconds(item.average_correct_seconds),
+            )
+    return table
+
+
 @app.command()
 def results(
     limit: Annotated[
@@ -326,66 +365,48 @@ def results(
     if not rows:
         console.print("No completed challenges yet.")
         return
-    table = Table(title="Challenge history")
-    for heading in (
-        "Date",
-        "Difficulty",
-        "Stages",
-        "Examples",
-        "Correct",
-        "Accuracy",
-        "Score",
-        "Grade",
-        "Avg time",
-        "Timeouts",
-        "Duration",
-    ):
-        table.add_column(heading)
+    aggregate = stats.aggregate()
+    current, longest = stats.streak(date.today())
+    console.print(
+        Panel(
+            f"[bold]Sessions:[/bold] {aggregate.completed_trainings} · "
+            f"[bold]Examples:[/bold] {aggregate.total_examples} · "
+            f"[bold]Accuracy:[/bold] {aggregate.accuracy:.1%} · "
+            f"[bold]Average answer:[/bold] {aggregate.average_response_seconds:.2f}s\n"
+            f"[bold]Streak:[/bold] {_days(current)} (best {longest}) · "
+            f"[bold]Last session:[/bold] {_grade_markup(rows[0].score_percent)} "
+            f"({rows[0].score_percent:.1%})\n"
+            f"[bold]Score trend:[/bold] "
+            f"{_sparkline([row.score_percent for row in reversed(rows)])} · "
+            f"[bold]Timeouts:[/bold] {aggregate.timeouts}",
+            title="Results",
+        )
+    )
+    table = Table(title="History")
+    table.add_column("Date", no_wrap=True)
+    table.add_column("Difficulty", no_wrap=True)
+    for heading in ("Correct", "Accuracy", "Score"):
+        table.add_column(heading, justify="right")
+    table.add_column("Grade", justify="center")
+    table.add_column("Avg", justify="right")
     for row in rows:
         table.add_row(
             datetime.fromtimestamp(row.started_at).astimezone().strftime("%Y-%m-%d %H:%M"),
             row.difficulty,
-            str(row.stages),
-            str(row.total_examples),
-            str(row.correct_answers),
+            f"{row.correct_answers}/{row.total_examples}",
             f"{row.accuracy:.1%}",
             f"{row.score_percent:.1%}",
-            grade_for_score(row.score_percent),
+            _grade_markup(row.score_percent),
             f"{row.average_response_seconds:.2f}s",
-            str(row.timeouts),
-            f"{row.actual_duration_seconds:.1f}s",
         )
     console.print(table)
-    aggregate = stats.aggregate()
+    breakdown = stats.breakdown()
     console.print(
-        f"Completed: {aggregate.completed_trainings} · examples: {aggregate.total_examples} · accuracy: {aggregate.accuracy:.1%} · timeouts: {aggregate.timeouts} · average answer: {aggregate.average_response_seconds:.2f}s"
+        _group_table("Breakdown", (breakdown.difficulties, breakdown.operations, breakdown.topics))
     )
-    if aggregate.by_operation:
-        console.print(
-            "Operations: "
-            + ", ".join(
-                f"{op} {correct}/{total}"
-                for op, (total, correct) in sorted(aggregate.by_operation.items())
-            )
-        )
-    if aggregate.by_topic:
-        console.print(
-            "Topics: "
-            + ", ".join(
-                f"{topic} {correct}/{total}"
-                for topic, (total, correct) in sorted(aggregate.by_topic.items())
-            )
-        )
-    if aggregate.by_difficulty:
-        console.print(
-            "Difficulty: "
-            + ", ".join(
-                f"{level} {correct}/{total}"
-                for level, (total, correct) in sorted(aggregate.by_difficulty.items())
-            )
-        )
-    current, longest = stats.streak(date.today())
-    console.print(f"Streak: {_days(current)} (best {longest})")
+    weak = stats.weak_spots()
+    if weak:
+        console.print(_group_table("Weak spots", (weak,)))
     records = Table(title="Personal records")
     for heading in (
         "Difficulty",

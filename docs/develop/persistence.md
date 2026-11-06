@@ -24,6 +24,13 @@ Topics in `comparable_history` compare as the stored JSON string, so the order w
 
 Mean time of correct answers comes from the `_COMPLETED` join over `attempts`; a training with no correct answer yields `NULL`/`None`.
 
+## Results views
+
+- `breakdown()` groups attempts of completed trainings by difficulty, operation, and topic. `weak_spots()` adds trick strategies (attempts whose topics include `tricks`). Operations and topics come from each attempt's stored JSON, so a repeated operation counts once per entry.
+- `weak_spots(min_attempts=5, limit=3)` drops groups below `min_attempts` and groups without a miss, then ranks by accuracy ascending and average correct time descending. Difficulty groups and the `tricks` topic row (covered by its strategies) are not ranked.
+- Averages use correct answers only, and are `None` when a group has none. Accuracy is `correct / attempts`.
+- `attempts(training_id)` returns each example of one training in stage and example order. The `results` sparkline uses `history()` scores and needs no query of its own.
+
 ## Streak
 
 `streak(today)` counts distinct local dates (`datetime.fromtimestamp`) with a completed training. The current run stays alive through the end of the day after the last training. Tests pass `today` explicitly.

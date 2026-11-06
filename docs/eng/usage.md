@@ -57,7 +57,13 @@ A progress group is difficulty, strict or soft mode, and the selected operations
 
 ## Review or clear results
 
-`numbra results` shows recent completed sessions, totals by operation, topic, and difficulty, your streak, a `Personal records` table per progress group, and, once you have trained with `tricks`, a `Tricks` table with attempts, accuracy, and average correct time for each trick. Choose how many sessions to display with `--limit`, for example `numbra results --limit 20`.
+`numbra results` prints, in order:
+
+- `Results` panel — completed sessions, examples, accuracy, and average answer time over all sessions; your streak; the grade of the last session; and a score sparkline of the sessions shown, oldest to newest, plus the timeout count.
+- `History` — the most recent sessions, newest first: correct answers, accuracy, score, grade (S, A, B, C, or D), and average answer time. Choose the number of rows with `--limit`, for example `numbra results --limit 20`.
+- `Breakdown` — attempts, accuracy, and average time of correct answers by difficulty, operation, and topic.
+- `Weak spots` — shown only when some operation, topic, or trick has at least five attempts. It lists the three groups with the lowest accuracy; ties go to the group with the slower correct answers.
+- `Personal records` — one row per progress group, and, once you have trained with `tricks`, a `Tricks` table with attempts, accuracy, and average correct time for each trick.
 
 To clear saved results, run `numbra results --reset` and confirm the prompt. For a script, add `--yes` to skip confirmation. Reset removes training history, records, and streaks.
 

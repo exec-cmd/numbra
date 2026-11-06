@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .challenge import AnswerAttempt, CompletedTraining
 from .db.schema import SCHEMA
+from .models import Difficulty
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +61,44 @@ class StrategyStats:
     average_correct_seconds: float | None
 
 
+@dataclass(frozen=True, slots=True)
+class AttemptRecord:
+    stage_number: int
+    kind: str
+    number: int
+    expression: str
+    correct_answer: str
+    user_answer: str | None
+    is_correct: bool
+    elapsed_seconds: float
+    timed_out: bool
+    score: float
+    strategy: str
+    topics: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class GroupStats:
+    """Attempts in one group; kind is difficulty, operation, topic or trick."""
+
+    kind: str
+    name: str
+    attempts: int
+    correct: int
+    average_correct_seconds: float | None
+
+    @property
+    def accuracy(self) -> float:
+        return self.correct / self.attempts if self.attempts else 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class Breakdown:
+    difficulties: tuple[GroupStats, ...]
+    operations: tuple[GroupStats, ...]
+    topics: tuple[GroupStats, ...]
+
+
 # Completed trainings with the mean time of their correct answers (NULL when none).
 # One grouped pass over attempts; a correlated subquery rescans them per training.
 _COMPLETED = (
@@ -67,6 +106,15 @@ _COMPLETED = (
     "SELECT s.training_id, AVG(a.elapsed) AS average_correct FROM attempts a "
     "JOIN stages s ON s.id = a.stage_id WHERE a.is_correct = 1 GROUP BY s.training_id"
     ") c ON c.training_id = t.id WHERE t.status = 'completed' "
+)
+
+# Attempts of completed trainings per group key; _group_stats splits them by kind.
+_ATTEMPT_GROUPS = (
+    "SELECT t.difficulty, a.operations, a.topics, a.strategy, a.is_correct, "
+    "COUNT(*) AS total, SUM(a.elapsed) AS seconds FROM attempts a "
+    "JOIN stages s ON s.id = a.stage_id JOIN trainings t ON t.id = s.training_id "
+    "WHERE t.status = 'completed' "
+    "GROUP BY t.difficulty, a.operations, a.topics, a.strategy, a.is_correct"
 )
 
 
@@ -254,6 +302,65 @@ class Stats:
             ).fetchall()
         return [_training_record(row) for row in rows]
 
+    def attempts(self, training_id: int) -> list[AttemptRecord]:
+        """Every example of one training in stage and example order."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT s.number AS stage_number, s.kind, a.number, a.expression, "
+                "a.correct_answer, a.user_answer, a.is_correct, a.elapsed, a.timed_out, "
+                "a.score, a.strategy, a.topics FROM attempts a JOIN stages s ON s.id = a.stage_id "
+                "WHERE s.training_id = ? ORDER BY s.number, a.number",
+                (training_id,),
+            ).fetchall()
+        return [
+            AttemptRecord(
+                row["stage_number"],
+                row["kind"],
+                row["number"],
+                row["expression"],
+                row["correct_answer"],
+                row["user_answer"],
+                bool(row["is_correct"]),
+                row["elapsed"],
+                bool(row["timed_out"]),
+                row["score"],
+                row["strategy"],
+                tuple(json.loads(row["topics"])),
+            )
+            for row in rows
+        ]
+
+    def breakdown(self) -> Breakdown:
+        """Accuracy and average correct time by difficulty, operation and topic."""
+        groups = _group_stats(self._attempt_groups())
+        levels = {level.value: index for index, level in enumerate(Difficulty)}
+        difficulties = sorted(
+            _of_kind(groups, "difficulty"), key=lambda group: levels.get(group.name, len(levels))
+        )
+        return Breakdown(
+            tuple(difficulties),
+            _of_kind(groups, "operation"),
+            _of_kind(groups, "topic"),
+        )
+
+    def weak_spots(self, min_attempts: int = 5, limit: int = 3) -> list[GroupStats]:
+        """Lowest-accuracy operations, topics and trick strategies with enough attempts and a miss."""
+        groups = [
+            group
+            for group in _group_stats(self._attempt_groups())
+            if group.kind != "difficulty"
+            and (group.kind, group.name) != ("topic", "tricks")
+            and group.attempts >= min_attempts
+            and group.correct < group.attempts
+        ]
+        # A missing average only happens at accuracy 0, so the fallback never breaks a tie.
+        groups.sort(key=lambda group: (group.accuracy, -(group.average_correct_seconds or 0.0)))
+        return groups[: max(limit, 0)]
+
+    def _attempt_groups(self) -> list[sqlite3.Row]:
+        with self._connect() as connection:
+            return connection.execute(_ATTEMPT_GROUPS).fetchall()
+
     def aggregate(self) -> AggregateStats:
         with self._connect() as connection:
             row = connection.execute(
@@ -420,6 +527,38 @@ class Stats:
             current += 1
             cursor -= timedelta(days=1)
         return current, best
+
+
+def _group_stats(rows: list[sqlite3.Row]) -> list[GroupStats]:
+    """Sum attempt groups into per-difficulty, per-operation, per-topic and per-trick rows."""
+    totals: dict[tuple[str, str], list[float]] = {}
+    for row in rows:
+        topics = json.loads(row["topics"])
+        keys = [("difficulty", row["difficulty"])]
+        keys += [("operation", operation) for operation in json.loads(row["operations"])]
+        keys += [("topic", topic) for topic in topics]
+        if "tricks" in topics and row["strategy"]:
+            keys.append(("trick", row["strategy"]))
+        for key in keys:
+            values = totals.setdefault(key, [0.0, 0.0, 0.0])
+            values[0] += row["total"]
+            if row["is_correct"]:
+                values[1] += row["total"]
+                values[2] += row["seconds"]
+    return [
+        GroupStats(
+            kind,
+            name,
+            int(values[0]),
+            int(values[1]),
+            values[2] / values[1] if values[1] else None,
+        )
+        for (kind, name), values in sorted(totals.items())
+    ]
+
+
+def _of_kind(groups: list[GroupStats], kind: str) -> tuple[GroupStats, ...]:
+    return tuple(group for group in groups if group.kind == kind)
 
 
 def _group(record: TrainingRecord) -> tuple[str, bool, tuple[str, ...], tuple[str, ...]]:

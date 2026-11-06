@@ -303,3 +303,53 @@ def test_config_path_is_inside_isolated_config_root() -> None:
     assert result.exit_code == 0
     assert result.stdout.strip().endswith("numbra.toml")
     assert "platform-config" in result.stdout
+
+
+def test_results_shows_summary_history_and_breakdown(monkeypatch) -> None:
+    _run_correct_challenge(monkeypatch)
+    result = runner.invoke(app, ["results"])
+    assert result.exit_code == 0
+    output = re.sub(r"\s+", " ", result.stdout)
+    assert "Sessions: 1" in output
+    assert re.search(r"Score trend: [▁▂▃▄▅▆▇█]+", output)
+    assert "History" in output
+    assert "Breakdown" in output
+    assert "difficulty: normal" in output
+    assert "operation: +" in output
+    assert "Avg correct" in output
+
+
+def test_results_weak_spots_list_missed_operations(monkeypatch) -> None:
+    cli_module = importlib.import_module("numbra.cli.app")
+
+    async def wrong_prompt(*args, **kwargs):
+        return "x"
+
+    async def no_cooldown(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(cli_module, "timed_prompt", wrong_prompt)
+    monkeypatch.setattr(cli_module, "cooldown", no_cooldown)
+    challenge = runner.invoke(
+        app, ["challenge", "-t", "1", "-n", "1", "-o", "+", "--cooldown", "1"]
+    )
+    assert challenge.exit_code == 0, challenge.stdout
+
+    result = runner.invoke(app, ["results"])
+
+    assert result.exit_code == 0
+    output = re.sub(r"\s+", " ", result.stdout)
+    assert "Weak spots" in output
+    assert "0.0%" in output.split("Weak spots", 1)[1].split("Personal records", 1)[0]
+
+
+def test_results_yes_requires_reset() -> None:
+    result = runner.invoke(app, ["results", "--yes"])
+    assert result.exit_code == 2
+    assert "--yes can only be used with --reset" in result.stdout
+
+
+def test_sparkline_maps_scores_to_block_characters() -> None:
+    cli_module = importlib.import_module("numbra.cli.app")
+
+    assert cli_module._sparkline([0.0, 0.5, 1.0, 2.0, -1.0]) == "▁▅██▁"
