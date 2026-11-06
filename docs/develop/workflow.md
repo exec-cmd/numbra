@@ -25,7 +25,7 @@ Start with the closest file, then run everything.
 - Storage and progress: `test_stats.py`, `test_stats_migrations.py`, `test_progress.py`
 - Post-training summary and recommendation: `test_report.py`
 - Commands and output: `test_cli.py`
-- Interactive interface, menu, training flow and summary: `test_tui.py`
+- Interactive interface, menu, results, training flow and summary: `test_tui.py`
 
 ## Documentation
 

@@ -15,12 +15,14 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList
 
 from ..config import ConfigManager, Settings, default_database_path
+from .results import ResultsScreen
 from .train import TrainSetupScreen
 from .tricks import TricksScreen
 
 # (id, label, screen factory). Add a row to add a menu entry; a None factory quits the app.
 MENU: tuple[tuple[str, str, Callable[[], Screen[None]] | None], ...] = (
     ("train", "Train", TrainSetupScreen),
+    ("results", "Results", ResultsScreen),
     ("tricks", "Tricks", TricksScreen),
     ("quit", "Quit", None),
 )

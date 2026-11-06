@@ -2,7 +2,7 @@
 
 ## Interactive mode
 
-Run `numbra` with no arguments in a terminal to open the interactive interface. The menu offers **Train** and **Tricks**; `q` or **Quit** exits. Train walks through a setup form (difficulty, duration, stages, operations and topics, strict mode, seed), then the timed run, then the summary. The form starts from your saved settings. Without a terminal, for example when output is piped, `numbra` prints the help text instead. Every command in this page works the same way.
+Run `numbra` with no arguments in a terminal to open the interactive interface. The menu offers **Train**, **Results** and **Tricks**; `q` or **Quit** exits. Train walks through a setup form (difficulty, duration, stages, operations and topics, strict mode, seed), then the timed run, then the summary. The form starts from your saved settings. Without a terminal, for example when output is piped, `numbra` prints the help text instead. Every command in this page works the same way.
 
 Keys during a training:
 
@@ -10,6 +10,15 @@ Keys during a training:
 - `Esc` pressed twice cancels the training. Nothing is saved.
 - In the summary, `Enter` or `Esc` returns to the menu. The setup form and Tricks screen close with `Esc`.
 - `Ctrl+Q` quits from any screen. An unfinished training is not saved.
+
+The Results screen shows the same saved data as `numbra results`, on tabs:
+
+- **History** lists completed sessions, newest first. Select a row with `Enter` to see every example of that session: stage, kind, expression, your answer, the correct answer, result, time and score. `Esc` returns to the list.
+- **Progress** shows the score trend, oldest to newest, with the best, last and average score. It needs two sessions.
+- **Breakdown**, **Weak spots**, **Records** and **Tricks** match the tables of `numbra results`.
+- The summary above the tabs shows sessions, examples, accuracy, average answer time, streak and the grade of the last session. History and Progress cover the 1000 newest sessions.
+
+`r` reloads the data, and `Esc` returns to the menu. The screen cannot reset results; use `numbra results --reset`.
 
 ## Install and start
 

@@ -13,15 +13,17 @@ from types import SimpleNamespace
 from typing import Any
 
 from textual.pilot import Pilot
-from textual.widgets import Button, DataTable, Input, OptionList, Static, Switch
+from textual.widgets import Button, DataTable, Input, OptionList, Sparkline, Static, Switch
 from typer.testing import CliRunner
 
 import numbra.tui
 from numbra.config import ConfigError, ConfigManager, ConfigPaths, Settings
+from numbra.core.challenge import Challenge, ChallengeOptions
 from numbra.core.models import Difficulty, Operation
 from numbra.core.stats import Stats
 from numbra.core.tricks import TRICKS
 from numbra.tui.app import MENU, MenuScreen, NumbraApp
+from numbra.tui.results import ResultsScreen, SessionScreen
 from numbra.tui.train import SummaryScreen, TrainingScreen, TrainSetupScreen
 from numbra.tui.tricks import TricksScreen
 
@@ -101,7 +103,7 @@ def test_menu_lists_every_entry(tmp_path: Path) -> None:
             menu = app.screen.query_one(OptionList)
             labels = [str(menu.get_option_at_index(i).prompt) for i in range(menu.option_count)]
             assert labels == [label for _, label, _ in MENU]
-            assert labels == ["Train", "Tricks", "Quit"]
+            assert labels == ["Train", "Results", "Tricks", "Quit"]
 
     asyncio.run(scenario())
 
@@ -246,7 +248,7 @@ def test_tricks_screen_lists_every_trick(tmp_path: Path) -> None:
         app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
         async with app.run_test() as pilot:
             await pilot.pause()
-            app.screen.query_one(OptionList).highlighted = 1
+            app.screen.query_one(OptionList).highlighted = 2
             await pilot.press("enter")
             await wait_until(pilot, lambda: isinstance(app.screen, TricksScreen))
             table = app.screen.query_one(DataTable)
@@ -257,6 +259,89 @@ def test_tricks_screen_lists_every_trick(tmp_path: Path) -> None:
                 "Example",
                 "Levels",
             ]
+
+    asyncio.run(scenario())
+
+
+def save_completed_session(tmp_path: Path) -> int:
+    session = Challenge(make_settings(tmp_path)).create_session(
+        ChallengeOptions(seed=42, stages=1, operations=(Operation.ADD,))
+    )
+    for index, problem in enumerate(session.stages[0].problems):
+        session.submit(0, index, str(problem.answer), 0.5)
+    Stats(tmp_path / "numbra.sqlite3").save(session.complete(actual_duration=1.0))
+    return session.total_examples
+
+
+async def open_results(pilot: Pilot[Any], app: NumbraApp) -> ResultsScreen:
+    app.screen.query_one(OptionList).highlighted = 1  # Menu: Results
+    await pilot.press("enter")
+    await wait_until(pilot, lambda: isinstance(app.screen, ResultsScreen))
+    screen = app.screen
+    assert isinstance(screen, ResultsScreen)
+    return screen
+
+
+def test_results_without_sessions_shows_the_empty_message(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            results = await open_results(pilot, app)
+            await wait_until(pilot, lambda: results.query_one("#empty").display)
+            assert plain_text(results.query_one("#empty", Static)) == (
+                "No completed challenges yet."
+            )
+            assert not results.query_one("#tabs").display
+
+    asyncio.run(scenario())
+
+
+def test_results_history_opens_a_session_and_escape_returns(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        total = save_completed_session(tmp_path)
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            results = await open_results(pilot, app)
+            assert results.query_one("#history", DataTable).row_count == 1
+            await pilot.press("enter")
+            await wait_until(pilot, lambda: isinstance(app.screen, SessionScreen))
+            assert app.screen.query_one("#attempts", DataTable).row_count == total
+            await pilot.press("escape")
+            await wait_until(pilot, lambda: isinstance(app.screen, ResultsScreen))
+            await pilot.press("escape")
+            await wait_until(pilot, lambda: isinstance(app.screen, MenuScreen))
+
+    asyncio.run(scenario())
+
+
+def test_results_tabs_show_saved_statistics(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        save_completed_session(tmp_path)
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            results = await open_results(pilot, app)
+            assert results.query_one("#breakdown", DataTable).row_count > 0
+            assert results.query_one("#records", DataTable).row_count == 1
+            # One session has no miss and fewer than five attempts, so no weak spot.
+            assert results.query_one("#weak", DataTable).row_count == 0
+            assert results.query_one("#weak-note").display
+            # The trend needs two sessions; the hint takes its place.
+            assert not results.query_one("#trend", Sparkline).display
+            assert results.query_one("#trend-hint").display
+
+    asyncio.run(scenario())
+
+
+def test_results_reload_shows_sessions_saved_while_open(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            results = await open_results(pilot, app)
+            await wait_until(pilot, lambda: results.query_one("#empty").display)
+            save_completed_session(tmp_path)
+            await pilot.press("r")
+            await wait_until(pilot, lambda: results.query_one("#history", DataTable).row_count == 1)
+            assert not results.query_one("#empty").display
 
     asyncio.run(scenario())
 
