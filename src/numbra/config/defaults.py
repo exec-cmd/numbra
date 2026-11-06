@@ -19,6 +19,7 @@ operation_bonus_enabled = true
 "-" = 0
 "*" = 1
 "/" = 2
+"^" = 3
 
 [stages.fast]
 limit_seconds = 5

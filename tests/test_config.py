@@ -163,7 +163,7 @@ def test_operation_timing_disable_can_omit_bonus_table(tmp_path: Path) -> None:
     ConfigManager(paths).load_or_create()
     paths.main.write_text(
         paths.main.read_text(encoding="utf-8").replace(
-            '[timing]\noperation_bonus_enabled = true\n[timing.operation_bonus_seconds]\n"+" = 0\n"-" = 0\n"*" = 1\n"/" = 2\n',
+            '[timing]\noperation_bonus_enabled = true\n[timing.operation_bonus_seconds]\n"+" = 0\n"-" = 0\n"*" = 1\n"/" = 2\n"^" = 3\n',
             "[timing]\noperation_bonus_enabled = false\n",
         ),
         encoding="utf-8",
