@@ -44,6 +44,8 @@ numbra challenge -o "*,/" -t 3   # only multiplication and division, three minut
 numbra challenge -o tricks       # mental-math tricks
 numbra tricks                    # every trick with its rule and an example
 numbra results                   # history, personal records, streak
+numbra config list               # every setting and its value
+numbra config set challenge.difficulty hard   # save a new default
 ```
 
 Press `Ctrl+C` to cancel; an incomplete session is not saved.
@@ -65,7 +67,7 @@ After the last example Numbra prints your score and grade, a breakdown by stage,
 | --- | --- |
 | [Usage](docs/eng/usage.md) | Commands, options, results |
 | [Training rules](docs/eng/training.md) | Difficulty, stages, timing, scoring, progress |
-| [Configuration](docs/eng/configuration.md) | `numbra.toml`, file locations |
+| [Configuration](docs/eng/configuration.md) | `numbra.toml`, `numbra config`, file locations |
 | [Agent reference](docs/develop/README.md) | Internals for coding agents; start with [AGENTS.md](AGENTS.md) |
 
 ## Development

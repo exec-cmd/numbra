@@ -44,6 +44,8 @@ numbra challenge -o "*,/" -t 3   # только умножение и делен
 numbra challenge -o tricks       # приёмы устного счёта
 numbra tricks                    # все приёмы с правилом и примером
 numbra results                   # история, личные рекорды, серия дней
+numbra config list               # все настройки и их значения
+numbra config set challenge.difficulty hard   # сохранить сложность по умолчанию
 ```
 
 `Ctrl+C` отменяет тренировку; незавершённая сессия не сохраняется.
@@ -67,7 +69,7 @@ Correct · score 1.00
 | --- | --- |
 | [Использование](docs/eng/usage.md) | Команды, параметры, результаты |
 | [Правила тренировки](docs/eng/training.md) | Сложность, этапы, время, очки, прогресс |
-| [Настройка](docs/eng/configuration.md) | `numbra.toml`, расположение файлов |
+| [Настройка](docs/eng/configuration.md) | `numbra.toml`, `numbra config`, расположение файлов |
 | [Справочник для агентов](docs/develop/README.md) | Внутреннее устройство для AI-агентов; начните с [AGENTS.md](AGENTS.md) |
 
 ## Разработка

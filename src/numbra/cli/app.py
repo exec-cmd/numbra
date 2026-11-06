@@ -4,15 +4,27 @@ import asyncio
 import logging
 import time
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
 from .._version import __version__
-from ..config import ConfigError, ConfigManager, default_database_path, default_log_path
+from ..config import (
+    ConfigError,
+    ConfigManager,
+    default_config_paths,
+    default_database_path,
+    default_log_path,
+    format_value,
+    get_value,
+    list_values,
+    set_value,
+    unset_value,
+)
 from ..core.challenge import (
     Challenge,
     ChallengeOptions,
@@ -411,3 +423,77 @@ def results(
                 else f"{item.average_correct_seconds:.2f}s",
             )
         console.print(trick_table)
+
+
+config_app = typer.Typer(
+    no_args_is_help=True, help="Show and change settings in numbra.toml without editing it."
+)
+app.add_typer(config_app, name="config")
+
+
+def _plain(text: str) -> None:
+    # Values such as ["+", "-"] must not be read as Rich markup, and long paths must not wrap.
+    console.print(text, markup=False, highlight=False, soft_wrap=True)
+
+
+def _config_error(exc: ConfigError) -> NoReturn:
+    logger.error("Configuration command failed: %s", exc)
+    console.print(f"[red]Configuration error:[/red] {escape(str(exc))}")
+    raise typer.Exit(code=2) from exc
+
+
+@config_app.command("list", help="Show every setting with its effective value.")
+def config_list() -> None:
+    try:
+        values = list_values(default_config_paths())
+    except ConfigError as exc:
+        _config_error(exc)
+    for key, value in values:
+        _plain(f"{key} = {format_value(value)}")
+
+
+@config_app.command("get", help="Show the effective value of one setting.")
+def config_get(
+    key: Annotated[str, typer.Argument(help="Dotted key, for example challenge.difficulty.")],
+) -> None:
+    try:
+        value = get_value(default_config_paths(), key)
+    except ConfigError as exc:
+        _config_error(exc)
+    _plain("unset" if value is None else format_value(value))
+
+
+@config_app.command(
+    "set",
+    context_settings={"ignore_unknown_options": True},
+    help='Save a value. Text is read as TOML; quote lists, for example \'["+", "-"]\'.',
+)
+def config_set(
+    key: Annotated[str, typer.Argument(help="Dotted key, for example challenge.difficulty.")],
+    value: Annotated[str, typer.Argument(help="New value, for example hard or 42.")],
+) -> None:
+    paths = default_config_paths()
+    try:
+        set_value(paths, key, value)
+        current = get_value(paths, key)
+    except ConfigError as exc:
+        _config_error(exc)
+    _plain(f"{key} = {format_value(current)}")
+
+
+@config_app.command("unset", help="Remove a saved value so the built-in default applies again.")
+def config_unset(
+    key: Annotated[str, typer.Argument(help="Dotted key, for example challenge.seed.")],
+) -> None:
+    paths = default_config_paths()
+    try:
+        unset_value(paths, key)
+        current = get_value(paths, key)
+    except ConfigError as exc:
+        _config_error(exc)
+    _plain("unset" if current is None else f"{key} = {format_value(current)}")
+
+
+@config_app.command("path", help="Print the path of numbra.toml.")
+def config_path() -> None:
+    _plain(str(default_config_paths().main))

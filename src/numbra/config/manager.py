@@ -23,6 +23,11 @@ class ConfigManager:
         self.paths = paths or default_config_paths()
 
     def load_or_create(self) -> Settings:
+        main, templates, design = self.load_documents()
+        return _parse_settings(main, templates, design, self.paths)
+
+    def load_documents(self) -> tuple[dict[str, Any], Any, dict[str, Any]]:
+        """Create missing files and return the raw documents, without validating them."""
         try:
             self.paths.root.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
@@ -53,7 +58,7 @@ class ConfigManager:
                 design = tomllib.load(file)
         except (OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
             raise ConfigError(f"{self.paths.design.name}: invalid TOML: {exc}") from exc
-        return _parse_settings(main, templates, design, self.paths)
+        return main, templates, design
 
 
 def _integer(value: Any, field: str) -> int:

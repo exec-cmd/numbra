@@ -24,6 +24,10 @@ On first run `ConfigManager.load_or_create` writes `numbra.toml`, `temps.json`, 
 - `design.toml`: `[styles]` with `accent`, `success`, `error`, `timer`; the CLI falls back to built-in styles.
 - Legacy `very-easy`/`very-hard` map to `easy`/`hard` with a warning (`_LEGACY_DIFFICULTIES`); legacy profile tables are ignored with a warning.
 
+## Editing from the command line
+
+`config/editor.py` backs `numbra config`. Its keys are the dotted paths of `_DEFAULT_TOML`, plus the optional `challenge.seed`, so a setting becomes settable once it is in the default file and the parser accepts it (steps 1 and 2 below). A write merges the change into the user document, runs `_parse_settings` over the result, and only then replaces `numbra.toml` through a temporary file. The parser stays the only validator. The writer re-serializes the document, so comments are lost; `list_values` and `get_value` validate the file as well.
+
 ## Adding or changing a setting
 
 1. Update the dataclass in `config/models.py` and the default in `config/defaults.py`.

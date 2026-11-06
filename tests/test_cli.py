@@ -252,3 +252,54 @@ def test_results_shows_tricks_table_only_with_data(monkeypatch) -> None:
     assert result.exit_code == 0
     assert "Tricks" in result.stdout
     assert "Avg correct" in result.stdout
+
+
+def test_config_help_lists_commands() -> None:
+    result = runner.invoke(app, ["config", "--help"])
+    assert result.exit_code == 0
+    for command in ("list", "get", "set", "unset", "path"):
+        assert command in result.stdout
+
+
+def test_config_set_get_and_unset_round_trip() -> None:
+    assert runner.invoke(app, ["config", "set", "challenge.difficulty", "hard"]).exit_code == 0
+    get_result = runner.invoke(app, ["config", "get", "challenge.difficulty"])
+    assert get_result.exit_code == 0
+    assert get_result.stdout.strip() == '"hard"'
+    unset_result = runner.invoke(app, ["config", "unset", "challenge.difficulty"])
+    assert unset_result.exit_code == 0
+    assert unset_result.stdout.strip() == 'challenge.difficulty = "normal"'
+
+
+def test_config_list_prints_effective_values() -> None:
+    result = runner.invoke(app, ["config", "list"])
+    assert result.exit_code == 0
+    assert 'challenge.difficulty = "normal"' in result.stdout
+    assert 'challenge.operations = ["+", "-", "*", "/"]' in result.stdout
+
+
+def test_config_set_accepts_negative_seed() -> None:
+    result = runner.invoke(app, ["config", "set", "challenge.seed", "-5"])
+    assert result.exit_code == 0
+    assert "challenge.seed = -5" in result.stdout
+
+
+def test_config_invalid_value_exits_2_and_names_key_and_file() -> None:
+    result = runner.invoke(app, ["config", "set", "challenge.difficulty", "bogus"])
+    assert result.exit_code == 2
+    assert "Configuration error" in result.stdout
+    assert "challenge.difficulty" in result.stdout
+    assert "numbra.toml" in result.stdout
+
+
+def test_config_unknown_key_exits_2() -> None:
+    result = runner.invoke(app, ["config", "get", "challenge.nope"])
+    assert result.exit_code == 2
+    assert "challenge.nope" in result.stdout
+
+
+def test_config_path_is_inside_isolated_config_root() -> None:
+    result = runner.invoke(app, ["config", "path"])
+    assert result.exit_code == 0
+    assert result.stdout.strip().endswith("numbra.toml")
+    assert "platform-config" in result.stdout

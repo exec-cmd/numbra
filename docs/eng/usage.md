@@ -60,3 +60,7 @@ A progress group is difficulty, strict or soft mode, and the selected operations
 `numbra results` shows recent completed sessions, totals by operation, topic, and difficulty, your streak, a `Personal records` table per progress group, and, once you have trained with `tricks`, a `Tricks` table with attempts, accuracy, and average correct time for each trick. Choose how many sessions to display with `--limit`, for example `numbra results --limit 20`.
 
 To clear saved results, run `numbra results --reset` and confirm the prompt. For a script, add `--yes` to skip confirmation. Reset removes training history, records, and streaks.
+
+## Change saved settings
+
+`numbra config list` shows every saved setting with its effective value. `numbra config get KEY` and `numbra config set KEY VALUE` read and change one setting, `numbra config unset KEY` restores its built-in default, and `numbra config path` prints the location of `numbra.toml`. Options given to `numbra challenge` still override these values for a single run. Keys and value syntax are described in [Configuration](configuration.md#change-settings-from-the-command-line).

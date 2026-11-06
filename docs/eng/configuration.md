@@ -4,7 +4,7 @@
 
 On first run, Numbra creates a configuration folder and a `numbra.toml` file. The file stores the default challenge length, difficulty, number of stages, operations, optional seed, and advanced-topic choices. Command-line options override saved settings; saved settings override built-in defaults.
 
-The simplest way to change settings is to edit `numbra.toml`. For example, this keeps six-minute normal challenges with three stages and enables square roots:
+You can edit `numbra.toml` by hand or use `numbra config`, described below. For example, this keeps six-minute normal challenges with three stages and enables square roots:
 
 ```toml
 [challenge]
@@ -17,9 +17,29 @@ operations = ["+", "-", "*", "/"]
 sqrt = true
 ```
 
-The supported difficulties are `easy`, `normal`, and `hard`. Older files that still say `very-easy` or `very-hard` keep working: they are read as `easy` or `hard` with a warning, and matching `[difficulties.very-easy]` or `[difficulties.very-hard]` tables are ignored with a warning. Numbra never rewrites your file; remove those values when convenient. Advanced topics (`sqrt`, `trig`, `log`, `power`, and `identities`) and `tricks` are off by default; `--advanced` never turns `tricks` on or off. `identities` is a separate choice and is not an operation in the `operations` list. See [Usage](usage.md) for command-line switches and [Training rules](training.md) for difficulty profiles.
+The supported difficulties are `easy`, `normal`, and `hard`. Older files that still say `very-easy` or `very-hard` keep working: they are read as `easy` or `hard` with a warning, and matching `[difficulties.very-easy]` or `[difficulties.very-hard]` tables are ignored with a warning. Numbra does not rewrite your file on its own; remove those values when convenient. Advanced topics (`sqrt`, `trig`, `log`, `power`, and `identities`) and `tricks` are off by default; `--advanced` never turns `tricks` on or off. `identities` is a separate choice and is not an operation in the `operations` list. See [Usage](usage.md) for command-line switches and [Training rules](training.md) for difficulty profiles.
 
 Leave out `seed` to get a new random sequence each time. Set an integer seed when you want to repeat a generated session with matching settings.
+
+## Change settings from the command line
+
+`numbra config` reads and changes `numbra.toml` without a text editor:
+
+```bash
+numbra config list                             # every setting with its effective value
+numbra config get challenge.difficulty         # one value
+numbra config set challenge.difficulty hard
+numbra config set challenge.operations '["+", "-"]'
+numbra config set challenge.seed 42
+numbra config unset challenge.seed             # back to a new random seed each time
+numbra config path                             # where numbra.toml is kept
+```
+
+Keys are the dotted names used in `numbra.toml`, such as `features.trig` or `stages.fast.limit_seconds`. Every key in the built-in defaults can be set, plus the optional `challenge.seed`. Quote keys that contain `*` in the shell, for example `'timing.operation_bonus_seconds.*'`.
+
+A value is read as TOML, so `true`, `42`, `7.5`, and `["+", "*"]` keep their types. Text that is not valid TOML is stored as a string, so `hard` needs no quotes. `unset` removes the key from the file, and the built-in default applies again.
+
+Numbra checks the whole file before it writes. An unknown key, or a value the file would reject, fails with an error that names the key and `numbra.toml`, and the file stays unchanged. A successful change rewrites `numbra.toml` in Numbra's own layout, so comments added by hand are lost. `list` and `get` also validate the file, so a broken file is reported instead of shown.
 
 ## Where settings and results are stored
 
