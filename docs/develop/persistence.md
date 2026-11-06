@@ -30,6 +30,6 @@ Mean time of correct answers comes from the `_COMPLETED` join over `attempts`; a
 
 ## Where rules live
 
-The recommendation thresholds currently sit in `cli/app.py`, while the product rule is in `AGENTS.md`. Change both together, and cover the change in `tests/test_progress.py`.
+The recommendation thresholds live in `build_report` (`core/report.py`), while the product rule is in `AGENTS.md`. Change both together, and cover the change in `tests/test_report.py`. The CLI only renders the report.
 
 Done when the focused stats tests pass against `tmp_path` databases, and an old-layout database opens and reads back.

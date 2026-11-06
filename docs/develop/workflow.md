@@ -19,6 +19,7 @@ Start with the closest file, then run everything.
 - Generator and catalogs: `test_generator.py`, `test_generation_features.py`, `test_generation_quality.py`, `test_generation_matrix.py`, `test_expressions.py`, `test_tricks.py`
 - Sessions and scoring: `test_challenge.py`, `test_scoring.py`
 - Storage and progress: `test_stats.py`, `test_stats_migrations.py`, `test_progress.py`
+- Post-training summary and recommendation: `test_report.py`
 - Commands and output: `test_cli.py`
 
 ## Documentation

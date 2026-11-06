@@ -13,9 +13,16 @@ from rich.table import Table
 
 from .._version import __version__
 from ..config import ConfigError, ConfigManager, default_database_path, default_log_path
-from ..core.challenge import Challenge, ChallengeOptions, TrainingSession, grade_for_score
+from ..core.challenge import (
+    Challenge,
+    ChallengeOptions,
+    CompletedTraining,
+    TrainingSession,
+    grade_for_score,
+)
 from ..core.generator import trick_levels
 from ..core.models import Difficulty, Operation, StageKind, Topic, parse_operation_selection
+from ..core.report import Recommendation, TrainingReport, build_report
 from ..core.stats import Stats
 from ..core.tricks import TRICKS
 from .input import cooldown, timed_prompt
@@ -182,10 +189,29 @@ def challenge(
         raise typer.Exit(code=130) from None
     completed = session.complete(time.monotonic() - started)
     stats = Stats(default_database_path())
-    previous = stats.comparable_history(completed, limit=2)
+    comparable = stats.comparable_history(completed, limit=1)
     progress = stats.progress_history(completed)
     training_id = stats.save(completed)
     logger.info("Challenge %s saved with %s attempts", training_id, len(completed.attempts))
+    report = build_report(
+        completed,
+        comparable[0] if comparable else None,
+        progress,
+        stats.streak(date.today()),
+    )
+    _print_summary(completed, report, success_style)
+
+
+RECOMMENDATION_TEXT = {
+    Recommendation.NEXT: "Recommendation: try the next difficulty level.",
+    Recommendation.LOWER: "Recommendation: repeat or lower the difficulty level.",
+    Recommendation.KEEP: "Recommendation: keep the current difficulty level.",
+}
+
+
+def _print_summary(
+    completed: CompletedTraining, report: TrainingReport, success_style: str
+) -> None:
     console.print(
         f"\n[bold]Result:[/bold] {completed.correct_answers}/{completed.total_examples} correct "
         f"({completed.accuracy:.1%}), score {completed.score:.2f}/{completed.max_score:.2f} "
@@ -194,87 +220,53 @@ def challenge(
     console.print(
         f"Target duration: {completed.duration_target_seconds:.1f}s · actual: {completed.actual_duration_seconds:.1f}s"
     )
-    for kind in StageKind:
-        stage_numbers = {stage.number for stage in completed.stages if stage.kind is kind}
-        kind_attempts = [item for item in completed.attempts if item.stage_number in stage_numbers]
-        kind_total = sum(len(stage.problems) for stage in completed.stages if stage.kind is kind)
-        if kind_total:
-            console.print(
-                f"{kind.value}: {sum(item.is_correct for item in kind_attempts)}/{kind_total} correct, "
-                f"{sum(item.timed_out for item in kind_attempts)} timeouts"
-            )
-    operation_totals: dict[Operation, list[int]] = {}
-    topic_totals: dict[Topic, list[int]] = {}
-    for attempt in completed.attempts:
-        stage = completed.stages[attempt.stage_number - 1]
-        problem = stage.problems[attempt.problem_number - 1]
-        for operation in problem.operations:
-            totals = operation_totals.setdefault(operation, [0, 0])
-            totals[0] += 1
-            totals[1] += int(attempt.is_correct)
-        for topic in problem.topics:
-            totals = topic_totals.setdefault(topic, [0, 0])
-            totals[0] += 1
-            totals[1] += int(attempt.is_correct)
-    if operation_totals:
+    for tally in report.stage_kinds:
+        console.print(
+            f"{tally.kind.value}: {tally.correct}/{tally.total} correct, {tally.timeouts} timeouts"
+        )
+    if report.operations:
         console.print(
             "Operations: "
             + ", ".join(
-                f"{operation.value} {values[1]}/{values[0]}"
-                for operation, values in sorted(
-                    operation_totals.items(), key=lambda item: item[0].value
-                )
+                f"{operation.value} {tally.correct}/{tally.total}"
+                for operation, tally in report.operations
             )
         )
-    if topic_totals:
+    if report.topics:
         console.print(
             "Topics: "
             + ", ".join(
-                f"{topic.value} {values[1]}/{values[0]}"
-                for topic, values in sorted(topic_totals.items(), key=lambda item: item[0].value)
+                f"{topic.value} {tally.correct}/{tally.total}" for topic, tally in report.topics
             )
         )
-    if previous:
-        prior = previous[0]
+    if report.comparison is not None:
+        prior = report.comparison.previous
         console.print(
             f"Previous comparable: score {prior.score_percent:.1%}, "
             f"accuracy {prior.accuracy:.1%}, average {prior.average_response_seconds:.2f}s, "
             f"timeouts {prior.timeouts}"
         )
+        comparison = report.comparison
         console.print(
-            f"Delta: score {(completed.score_percent - prior.score_percent):+.1%} · "
-            f"accuracy {(completed.accuracy - prior.accuracy):+.1%} · "
-            f"average {(completed.average_response_seconds - prior.average_response_seconds):+.2f}s · "
-            f"timeouts {completed.timeouts - prior.timeouts:+d}"
+            f"Delta: score {comparison.score_delta:+.1%} · "
+            f"accuracy {comparison.accuracy_delta:+.1%} · "
+            f"average {comparison.average_delta:+.2f}s · "
+            f"timeouts {comparison.timeouts_delta:+d}"
         )
-    average = completed.average_correct_seconds
-    if average is not None:
-        parts = [f"Avg correct answer: {average:.2f}s"]
-        times = [row.average_correct_seconds for row in progress]
-        known = [value for value in times if value is not None]
-        if known:
-            parts.append(f"best {min(known):.2f}s")
-        if times and times[0] is not None:
-            parts.append(f"previous {times[0]:.2f}s")
+    if report.average_correct_seconds is not None:
+        parts = [f"Avg correct answer: {report.average_correct_seconds:.2f}s"]
+        if report.best_correct_seconds is not None:
+            parts.append(f"best {report.best_correct_seconds:.2f}s")
+        if report.previous_correct_seconds is not None:
+            parts.append(f"previous {report.previous_correct_seconds:.2f}s")
         console.print(" · ".join(parts))
-    best = max((row.score_percent for row in progress), default=None)
-    if best is None or completed.score_percent > best:
+    if report.is_new_best:
         console.print(f"[{success_style}]New personal best: {completed.score_percent:.1%}![/]")
     else:
-        console.print(f"Personal best: {best:.1%} ({completed.score_percent - best:+.1%})")
-    current, longest = stats.streak(date.today())
-    console.print(f"Streak: {_days(current)} (best {longest})")
-    if len(progress) >= 2:
-        scores = [completed.score_percent, *(row.score_percent for row in progress[:2])]
-        if (
-            all(score >= 0.85 for score in scores)
-            and completed.difficulty is not list(Difficulty)[-1]
-        ):
-            console.print("Recommendation: try the next difficulty level.")
-        elif all(score < 0.40 for score in scores):
-            console.print("Recommendation: repeat or lower the difficulty level.")
-        else:
-            console.print("Recommendation: keep the current difficulty level.")
+        console.print(f"Personal best: {report.personal_best:.1%} ({report.score_vs_best:+.1%})")
+    console.print(f"Streak: {_days(report.current_streak)} (best {report.longest_streak})")
+    if report.recommendation is not None:
+        console.print(RECOMMENDATION_TEXT[report.recommendation])
 
 
 @app.command(help="List the mental-math tricks used by -o tricks.")

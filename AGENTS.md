@@ -10,7 +10,7 @@ Read the relevant implementation and tests before changing behavior. Prefer the 
 
 - `src/numbra/cli/` owns Typer commands, Rich output, Prompt Toolkit input, and logging setup.
 - `src/numbra/config/` owns platform paths, default files, parsing, validation, and public config exports.
-- `src/numbra/core/` owns arithmetic models, generation (`catalog.py`, `tricks.py`, `generator.py`), stage allocation, sessions, scoring, and statistics. Keep this package independent of Typer and Rich.
+- `src/numbra/core/` owns arithmetic models, generation (`catalog.py`, `tricks.py`, `generator.py`), stage allocation, sessions, scoring, statistics, and the post-training report (`report.py`). Keep this package independent of Typer and Rich.
 - `src/numbra/core/db/schema.py` defines the SQLite schema. `Stats._migrate()` handles existing databases.
 - `tests/` contains CLI, configuration, generator, generation-quality, progress, session/statistics, and product-rule coverage.
 - `README.md` and `README_RU.md` are short landing pages with the same structure; change both together. User-visible detail lives in `docs/eng/` (`usage.md`, `training.md`, `configuration.md`).
