@@ -51,7 +51,7 @@ def callback(
         raise typer.Exit()
 
 
-@app.command(help="Answers may be integers or fractions, for example 3/4.")
+@app.command(help="Answers are integers; exact fractions such as 6/3 are also accepted.")
 def challenge(
     duration: Annotated[
         int | None, typer.Option("-t", "--duration", help="Target duration in minutes.", min=1)

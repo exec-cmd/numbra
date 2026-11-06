@@ -20,7 +20,7 @@ Numbra generates reproducible exercises, runs short timed stages, and keeps your
 - **Three difficulties.** `easy`, `normal`, and `hard`, with transparent static profiles.
 - **Timed stages.** Slow, normal, and fast stages. Soft mode keeps input open past the limit and lowers the score; `--strict` ends the attempt at the limit.
 - **Beyond `+ − × ÷`.** Optional square roots, trigonometry, logarithms, powers, identities, and mental-math **tricks** such as `43 * 11` or `97 * 94`.
-- **Exact answers.** Integers and fractions like `3/4`, graded with exact arithmetic.
+- **Exact answers.** Every answer is a whole number, graded with exact arithmetic; fractions such as `3/4` are also accepted as input.
 - **Progress that means something.** Grades from S to D, personal bests per setup, average time per correct answer, a level recommendation, and a day streak.
 - **Local only.** No account, no cloud, no network.
 

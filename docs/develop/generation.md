@@ -29,7 +29,7 @@ The target level comes from `_next_level()`: a seeded, shuffled cycle over the b
 
 ## Topic atoms
 
-`catalog.topic_atoms` fixes the ranges: square roots 2–20; power bases 2–20 with exponents 2 and 3; logarithm bases 2, 3, 5, 10 with exponents −3 through 4; trigonometry from an exact-value table. Intermediate denominators stay at most 12 through `accepted`/`valid_bounds`. Widening a range is a product change.
+`catalog.topic_atoms` fixes the ranges: square roots 2–20; power bases 2–20 with exponents 2 and 3; logarithm bases 2, 3, 5, 10 with exponents −3 through 4; trigonometry from an exact-value table. Intermediate denominators stay at most 12 through `accepted`/`valid_bounds`. `topic_catalog` keeps only integer answers: a fractional atom such as `sin(30) = 1/2` also yields whole multiples (`2*sin(30)`, `4*sin(30)`, `6*sin(30)`, via `integral_forms`), and `add` drops any other fractional result. Widening a range is a product change.
 
 ## Tricks
 

@@ -14,7 +14,7 @@ Inside a stage, problems cycle through every work-unit level of the band in a sh
 
 Arithmetic follows standard precedence and is exact; division never divides a value by itself, and negative intermediate values and answers are allowed. A seed reproduces the same sequence for the same settings. Exercise collections are finite: when one is exhausted, examples repeat and Numbra prints a warning.
 
-Advanced topics are bounded: square roots cover perfect squares with roots 2–20; powers use bases 2–20 and exponents 2 or 3; logarithms use bases 2, 3, 5, or 10 with integer results −3 through 4; trigonometry uses exact rational values from its degree tables; identities use bounded sum and product patterns. Intermediate fractions have denominators of at most 12.
+Advanced topics are bounded: square roots cover perfect squares with roots 2–20; powers use bases 2–20 and exponents 2 or 3; logarithms use bases 2, 3, 5, or 10 with integer results −3 through 4; trigonometry uses exact rational values from its degree tables; identities use bounded sum and product patterns. Intermediate fractions have denominators of at most 12, and every answer is an integer.
 
 ## Tricks
 

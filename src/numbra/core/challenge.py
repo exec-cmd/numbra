@@ -85,7 +85,7 @@ class CompletedTraining:
     cooldown_seconds: float = 2.0
     cancelled: bool = False
     topics: tuple[Topic, ...] = ()
-    generation_version: int = 4
+    generation_version: int = 5
     scoring_version: int = 2
     settings_fingerprint: str = ""
 
@@ -157,7 +157,7 @@ class TrainingSession:
         self.topics = topics
         self.warnings = warnings
         self.settings_fingerprint = settings_fingerprint
-        self.generation_version = 4
+        self.generation_version = 5
         self.scoring_version = 2
         self.started_at = started_at
         self.difficulty = difficulty
@@ -380,7 +380,7 @@ class Challenge:
                     "limits": config.stage_limits,
                     "topics": [topic.value for topic in topics],
                     "operations": [op.value for op in operations],
-                    "generation": 3,
+                    "generation": 4,
                     "scoring": 2,
                 },
                 sort_keys=True,

@@ -188,6 +188,16 @@ def _power(base: int, exponent: int, enabled: bool) -> Expr:
     return result
 
 
+def integral_forms(tree: Expr, name: str) -> Iterable[tuple[Expr, str]]:
+    """A fractional atom such as sin(30) = 1/2 also yields whole multiples: 2*sin(30), 4*sin(30)."""
+    denominator = tree.evaluate().denominator
+    if denominator == 1:
+        yield tree, name
+        return
+    for k in range(denominator, 3 * denominator + 1, denominator):
+        yield B("*", N(k), tree), name
+
+
 def topic_atoms(topic: Topic, power_enabled: bool) -> Iterable[tuple[Expr, str]]:
     if topic is Topic.SQRT:
         for root in range(2, 21):
@@ -257,15 +267,18 @@ def topic_catalog(
     other_topics: tuple[Topic, ...] = (),
 ) -> tuple[Problem, ...]:
     atoms = tuple(
-        (tree, name)
+        (form, form_name)
         for tree, name in topic_atoms(topic, power_enabled)
         if accepted(tree, max_result)
+        for form, form_name in integral_forms(tree, name)
+        if accepted(form, max_result)
     )
     result: dict[tuple[object, ...], Problem] = {}
     values = sample(operands(minimum, min(maximum, max_result)), 4)
 
     def add(tree: Expr, name: str, topics: tuple[Topic, ...] = (topic,)) -> None:
-        if accepted(tree, max_result):
+        # Answers are integers outside funbox; fractional intermediates stay inside expressions.
+        if accepted(tree, max_result) and tree.evaluate().denominator == 1:
             key = canonical_key(tree)
             if key not in result:
                 result[key] = problem(tree, topic.value, name, topics)

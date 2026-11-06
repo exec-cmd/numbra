@@ -41,7 +41,7 @@ Advanced topics are off by default. Use `-o "sqrt,trig,log,power"` to select the
 
 `tricks` selects mental-math tricks such as `43 * 11`, `37 * 99`, or `97 * 94`. It is chosen only with `-o` or `[features] tricks`; `--advanced` and `--no-advanced` leave it unchanged. `-o tricks` alone gives a session of tricks only; `-o "+,-,*,/,tricks"` alternates tricks with ordinary arithmetic. Run `numbra tricks` to see every trick with its rule, an example, and the levels it appears on.
 
-Answers may be integers or exact fractions such as `3/4`. How stages, time limits, difficulty, and points work is described in [Training rules](training.md).
+Every answer is an integer. Input may also be an exact fraction such as `6/3`, which is compared exactly. How stages, time limits, difficulty, and points work is described in [Training rules](training.md).
 
 ## After a challenge
 
