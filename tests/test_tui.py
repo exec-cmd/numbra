@@ -121,8 +121,15 @@ def test_menu_lists_every_entry(tmp_path: Path) -> None:
             assert isinstance(app.screen, MenuScreen)
             menu = app.screen.query_one(OptionList)
             labels = [str(menu.get_option_at_index(i).prompt) for i in range(menu.option_count)]
-            assert labels == [label for _, label, _ in MENU]
-            assert labels == ["Train", "Results", "Settings", "Tricks", "Funbox", "Quit"]
+            assert labels == [f"{key}  {label}" for _, label, key, _, _ in MENU]
+            assert labels == [
+                "t  Train",
+                "r  Results",
+                "s  Settings",
+                "k  Tricks",
+                "f  Funbox",
+                "q  Quit",
+            ]
 
     asyncio.run(scenario())
 
@@ -280,7 +287,7 @@ def test_tricks_screen_lists_every_trick(tmp_path: Path) -> None:
             assert table.row_count == len(TRICKS)
             assert [str(column.label) for column in table.columns.values()] == [
                 "Trick",
-                "Example",
+                "Problem",
                 "Levels",
             ]
             rule = app.screen.query_one("#rule", Static)

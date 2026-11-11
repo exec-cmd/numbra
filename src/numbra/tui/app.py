@@ -8,12 +8,17 @@ import time
 from collections.abc import Awaitable, Callable
 from datetime import date
 from pathlib import Path
+from typing import cast
 
+from rich.console import Group, RenderableType
+from rich.table import Table
+from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, OptionList
+from textual.widgets import Footer, OptionList, Static
 
 from ..config import (
     ConfigManager,
@@ -22,20 +27,46 @@ from ..config import (
     default_config_paths,
     default_database_path,
 )
+from ..core.report import area_name
+from ..core.stats import Stats
 from .funbox import FunboxSetupScreen
 from .results import ResultsScreen
 from .settings import SettingsScreen
+from .style import days, grade_text, percent
 from .train import TrainSetupScreen
 from .tricks import TricksScreen
 
-# (id, label, screen factory). Add a row to add a menu entry; a None factory quits the app.
-MENU: tuple[tuple[str, str, Callable[[], Screen[None]] | None], ...] = (
-    ("train", "Train", TrainSetupScreen),
-    ("results", "Results", ResultsScreen),
-    ("settings", "Settings", SettingsScreen),
-    ("tricks", "Tricks", TricksScreen),
-    ("funbox", "Funbox", FunboxSetupScreen),
-    ("quit", "Quit", None),
+MENU: tuple[tuple[str, str, str, str, Callable[[], Screen[None]] | None], ...] = (
+    (
+        "train",
+        "Train",
+        "t",
+        "A timed run with your saved settings. You can change them before the start.",
+        TrainSetupScreen,
+    ),
+    (
+        "results",
+        "Results",
+        "r",
+        "Your progress: scores over time, sessions, and strong and weak areas.",
+        ResultsScreen,
+    ),
+    (
+        "settings",
+        "Settings",
+        "s",
+        "Default difficulty, length, topics and time limits.",
+        SettingsScreen,
+    ),
+    ("tricks", "Tricks", "k", "Mental-math shortcuts and the rule behind each one.", TricksScreen),
+    (
+        "funbox",
+        "Funbox",
+        "f",
+        "Experimental puzzles: fractions, substitution, equations, logic, derivatives. Not counted in records.",
+        FunboxSetupScreen,
+    ),
+    ("quit", "Quit", "q", "Leave numbra.", None),
 )
 
 
@@ -47,28 +78,103 @@ def terminal_theme(colorfgbg: str | None = None) -> str:
 
 
 class MenuScreen(Screen[None]):
-    BINDINGS = [Binding("q", "quit_app", "Quit")]
+    SUB_TITLE = "Menu"
+    BINDINGS = [
+        *(
+            Binding(key, f"open('{item_id}')", label, show=False)
+            for item_id, label, key, _, _ in MENU
+            if item_id != "quit"
+        ),
+        Binding("q", "quit_app", "Quit"),
+    ]
     DEFAULT_CSS = """
+    MenuScreen Horizontal { height: 1fr; }
+    MenuScreen #menu-side {
+        width: 34; height: 1fr; padding: 1 2;
+    }
+    MenuScreen #logo { color: $accent; text-style: bold; margin-bottom: 1; }
     MenuScreen OptionList, MenuScreen OptionList:focus {
-        width: 30; height: auto; margin: 1 1; border: none; background: transparent;
+        width: 1fr; height: auto; border: none; background: transparent;
+    }
+    MenuScreen #about {
+        width: 1fr; height: 1fr; padding: 1 2; border-left: solid $foreground 20%;
     }
     """
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._stats_block: Table | Text | None = None
+
     def compose(self) -> ComposeResult:
-        yield Header()
-        yield OptionList(*(label for _, label, _ in MENU), id="menu")
+        yield Horizontal(
+            Vertical(
+                Static("numbra", id="logo"),
+                OptionList(
+                    *(Text.assemble((key, "bold"), "  ", label) for _, label, key, _, _ in MENU),
+                    id="menu",
+                ),
+                id="menu-side",
+            ),
+            Static(id="about"),
+        )
         yield Footer()
 
     def on_mount(self) -> None:
+        self._refresh_stats()
+        self._update_about(0)
         self.query_one(OptionList).focus()
+
+    def on_screen_resume(self) -> None:
+        self._refresh_stats()
+        self._update_about(self.query_one(OptionList).highlighted or 0)
+
+    def _refresh_stats(self) -> None:
+        app = cast(NumbraApp, self.app)
+        stats = Stats(app.database_path)
+        history = stats.history(1)
+        if not history:
+            self._stats_block = Text("No trainings yet. Press t to start one.", style="dim")
+            return
+
+        today = app.today()
+        current, longest = stats.streak(today)
+        last = history[0]
+        days_ago = (today - date.fromtimestamp(last.started_at)).days
+        when = (
+            "today" if days_ago == 0 else "yesterday" if days_ago == 1 else f"{days_ago} days ago"
+        )
+        last_value = Text.assemble(
+            grade_text(last.score_percent), f" {percent(last.score_percent)}, {when}"
+        )
+        table = Table.grid(padding=(0, 3))
+        table.add_row("Streak", f"{days(current)} (best {longest})")
+        table.add_row("Last", last_value)
+        weak = stats.weak_spots(limit=1)
+        if weak:
+            table.add_row("Practise", area_name(weak[0].name))
+        self._stats_block = table
+
+    def _update_about(self, index: int) -> None:
+        _, label, _, description, _ = MENU[index]
+        content: list[RenderableType] = [Text(label, style="bold"), Text(description), Text("")]
+        if self._stats_block is not None:
+            content.append(self._stats_block)
+        self.query_one("#about", Static).update(Group(*content))
+
+    @on(OptionList.OptionHighlighted, "#menu")
+    def _highlight(self, event: OptionList.OptionHighlighted) -> None:
+        self._update_about(event.option_index)
 
     @on(OptionList.OptionSelected, "#menu")
     def _choose(self, event: OptionList.OptionSelected) -> None:
-        _, _, factory = MENU[event.option_index]
+        self.action_open(MENU[event.option_index][0])
+
+    def action_open(self, item_id: str) -> None:
+        factory = next(factory for candidate, _, _, _, factory in MENU if candidate == item_id)
         if factory is None:
-            self.app.exit()
-        else:
-            self.app.push_screen(factory())
+            self.action_quit_app()
+            return
+        self.app.push_screen(factory())
 
     def action_quit_app(self) -> None:
         self.app.exit()
