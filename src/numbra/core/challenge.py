@@ -476,8 +476,6 @@ def _matches_answer(value: str, expected: Answer) -> bool:
             return parsed is not None and parsed == parse_inequality(expected)
         if isinstance(expected, frozenset):
             return frozenset(_numbers(value)) == expected
-        if isinstance(expected, tuple):
-            return _numbers(value) == expected
         if not _NUMBER.fullmatch(value):
             return False
         return Fraction(value) == Fraction(expected)

@@ -13,9 +13,9 @@ from numbra.core.tricks import TRICKS, trick_catalog
 IDS = [trick.id for trick in TRICKS]
 
 
-def test_registry_lists_fourteen_unique_tricks() -> None:
-    assert len(IDS) == 14
-    assert len(set(IDS)) == 14
+def test_registry_lists_nineteen_unique_tricks() -> None:
+    assert len(IDS) == 19
+    assert len(set(IDS)) == 19
     assert all(trick.rule and trick.example for trick in TRICKS)
 
 
@@ -46,6 +46,19 @@ def test_trick_problems_are_tagged_and_exact() -> None:
         ("48 * 48", "square-near-50", 3),
         ("43 * 43", "square-near-50", 4),
         ("43 * 47", "same-decade", 3),
+        ("38 * 38", "square-near-round", 3),
+        ("37 * 37", "square-near-round", 4),
+        ("31 * 31", "square-near-round", 3),
+        ("17 * 17", "square-near-round", 3),
+        ("19 * 21", "difference-of-squares", 2),
+        ("48 * 52", "difference-of-squares", 3),
+        ("96 * 104", "difference-of-squares", 4),
+        ("47 * 15", "times-15", 2),
+        ("147 * 15", "times-15", 3),
+        ("48 * 125", "times-125", 3),
+        ("36 * 125", "times-125", 4),
+        ("372 / 4", "divide-by-4-or-8", 2),
+        ("1672 / 8", "divide-by-4-or-8", 4),
     ],
 )
 def test_trick_units_match_table(expression: str, strategy: str, units: int) -> None:
@@ -150,6 +163,10 @@ def test_trick_examples_are_correct(trick) -> None:
         ("41 * 41", "square-near-50", 4),
         ("25 * 25", "square-ending-5", 2),
         ("21 * 29", "same-decade", 3),
+        ("49 * 51", "difference-of-squares", 3),
+        ("99 * 101", "difference-of-squares", 4),
+        ("25 * 125", "times-25", 4),
+        ("46 * 15", "double-halve", 2),
     ],
 )
 def test_specific_tricks_keep_their_problems(expression: str, strategy: str, units: int) -> None:

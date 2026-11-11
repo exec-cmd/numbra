@@ -9,7 +9,7 @@ Read the relevant implementation and tests before changing behavior. Prefer the 
 ## Repository map
 
 - `src/numbra/cli/` owns Typer commands, Rich output, Prompt Toolkit input, and logging setup.
-- `src/numbra/tui/` owns the Textual interface (`numbra` with no arguments on a terminal): `app.py` has the menu and the `MENU` list, `train.py` the setup, timed run and summary screens, `results.py` the results tabs and session detail, `settings.py` the settings table and editor, `tricks.py` the tricks table, `funbox.py` the funbox setup, `graph.py` the graph plot widget. It is presentation only and drives the same core sessions and stats as the CLI.
+- `src/numbra/tui/` owns the Textual interface (`numbra` with no arguments on a terminal): `app.py` has the menu and the `MENU` list, `train.py` the setup, timed run and summary screens, `results.py` the results tabs and session detail, `settings.py` the settings table and editor, `tricks.py` the tricks table, `funbox.py` the funbox setup. It is presentation only and drives the same core sessions and stats as the CLI.
 - `src/numbra/config/` owns platform paths, default files, parsing, validation, and public config exports.
 - `src/numbra/core/` owns arithmetic models, generation (`catalog.py`, `tricks.py`, `generator.py`), stage allocation, sessions, scoring, statistics, and the post-training report (`report.py`). Keep this package independent of Typer and Rich.
 - `src/numbra/core/db/schema.py` defines the SQLite schema. `Stats._migrate()` handles existing databases.
@@ -64,7 +64,7 @@ Treat these as contracts unless the task explicitly changes them:
 - Maximum problem score is complexity-calibrated: `1 + 0.2 * max(0, complexity_score - 3)`. Grades use the existing S/A/B/C/D thresholds.
 - Cooldown defaults to two seconds and accepts values from one through three seconds.
 - The `tricks` topic is off by default, selected only through `-o tricks` or `[features] tricks`, and never toggled by `--advanced`/`--no-advanced`. Each trick problem is a single trick with explicit work units from `core/tricks.py`; tricks use `TRICK_MAX_RESULT` (easy 400, normal 2,500, hard 10,000) instead of the profile `max_result`, rotate by strategy, and stay outside operation balance.
-- Funbox is experimental and selected only by `numbra challenge --funbox MODES`; the `[funbox] modes` setting is validated but does not start a session. Its modes are `fractions`, `substitution`, `equations`, `logic`, `graphs`, and `derivatives`; only `fractions` gives non-integer answers; `graphs` is TUI-only; funbox results stay outside records, the recommendation, comparable history, and the streak.
+- Funbox is experimental and selected only by `numbra challenge --funbox MODES`; the `[funbox] modes` setting is validated but does not start a session. Its modes are `fractions`, `substitution`, `equations`, `logic`, and `derivatives`; only `fractions` gives non-integer answers; funbox results stay outside records, the recommendation, comparable history, and the streak.
 - Cancelling a challenge does not save a partial session. Only completed training is persisted.
 - Progress groups (records, recommendation) match difficulty, strict mode, operations, and topics, and ignore duration, stage count, and generator/scoring versions. `Previous comparable` stays an exact match. A day streak counts local dates with a completed training and survives until the end of the next day. The recommendation never suggests a level above `hard`.
 

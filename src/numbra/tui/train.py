@@ -9,7 +9,8 @@ from rich.text import Text
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
+from textual.content import Content
 from textual.screen import Screen
 from textual.timer import Timer
 from textual.widgets import (
@@ -22,7 +23,6 @@ from textual.widgets import (
     ProgressBar,
     Select,
     Static,
-    Switch,
 )
 
 from ..config import ConfigError, Settings
@@ -42,7 +42,6 @@ from ..core.models import (
 )
 from ..core.report import RECOMMENDATION_TEXT, TrainingReport, build_report
 from ..core.stats import Stats
-from .graph import GraphCanvas
 
 if TYPE_CHECKING:
     from .app import NumbraApp
@@ -61,6 +60,16 @@ def _enabled_by_default(token: str, settings: Settings) -> bool:
     return member in enabled or (member is Operation.POWER and Topic.POWER in enabled)
 
 
+class Tick(Checkbox):
+    """Checkbox drawn as [x] or [ ], so its state does not depend on color alone."""
+
+    @property
+    def _button(self) -> Content:
+        # shortcut: overrides a private Textual property; re-check on a Textual upgrade.
+        mark = "[x] " if self.value else "[ ] "
+        return Content.assemble((mark, self.get_visual_style("toggle--button")))
+
+
 def _whole(text: str, label: str, minimum: int | None = None) -> int:
     try:
         value = int(text)
@@ -75,11 +84,22 @@ class TrainSetupScreen(Screen[None]):
     """Form for one training; Start replaces this screen with the run."""
 
     BINDINGS = [Binding("escape", "back", "Back")]
+    CHOICES_LABEL = "Operations and topics"
     DEFAULT_CSS = """
-    TrainSetupScreen VerticalScroll { padding: 0 2; }
-    TrainSetupScreen Label { margin-top: 1; }
-    TrainSetupScreen Input, TrainSetupScreen Select { width: 30; }
-    TrainSetupScreen #error { color: $error; margin-top: 1; height: auto; }
+    TrainSetupScreen VerticalScroll { padding: 1 2; }
+    TrainSetupScreen .row { height: 3; }
+    TrainSetupScreen .row Label { width: 11; height: 3; content-align: left middle; }
+    TrainSetupScreen .row .after { width: auto; margin-left: 3; padding-right: 1; }
+    TrainSetupScreen #difficulty { width: 16; }
+    TrainSetupScreen #duration, TrainSetupScreen #stages { width: 7; }
+    TrainSetupScreen #seed { width: 16; }
+    TrainSetupScreen #strict { margin: 1 0 0 3; }
+    TrainSetupScreen Checkbox, TrainSetupScreen Checkbox:focus { border: none; }
+    TrainSetupScreen #choices-label { margin-top: 1; text-style: bold; }
+    TrainSetupScreen #choices {
+        grid-size: 5; grid-rows: 1; height: auto; margin-bottom: 1;
+    }
+    TrainSetupScreen #error { color: $error; height: auto; }
     """
 
     def __init__(self) -> None:
@@ -97,22 +117,29 @@ class TrainSetupScreen(Screen[None]):
             return
         challenge = self._settings.challenge
         with VerticalScroll():
-            yield Label("Difficulty")
-            yield Select(
-                [(level.value, level) for level in Difficulty],
-                value=challenge.difficulty,
-                allow_blank=False,
-                id="difficulty",
-            )
-            yield Label("Duration in minutes")
-            yield Input(str(challenge.duration_minutes), id="duration")
-            yield Label("Stages")
-            yield Input(str(challenge.stages), id="stages")
-            yield from self._choices(self._settings)
-            yield Label("Strict: an example ends at its time limit")
-            yield Switch(value=False, id="strict")
-            yield Label("Seed (empty for a random seed)")
-            yield Input("" if challenge.seed is None else str(challenge.seed), id="seed")
+            with Horizontal(classes="row"):
+                yield Label("Difficulty")
+                yield Select(
+                    [(level.value, level) for level in Difficulty],
+                    value=challenge.difficulty,
+                    allow_blank=False,
+                    id="difficulty",
+                )
+                yield Label("Minutes", classes="after")
+                yield Input(str(challenge.duration_minutes), id="duration")
+                yield Label("Stages", classes="after")
+                yield Input(str(challenge.stages), id="stages")
+            with Horizontal(classes="row"):
+                yield Label("Seed")
+                yield Input(
+                    "" if challenge.seed is None else str(challenge.seed),
+                    placeholder="random",
+                    id="seed",
+                )
+                yield Tick("strict: an example ends at its limit", compact=True, id="strict")
+            yield Label(self.CHOICES_LABEL, id="choices-label")
+            with Grid(id="choices"):
+                yield from self._choices(self._settings)
             yield Static("", id="error")
             yield Button("Start", variant="primary", id="start")
         yield Footer()
@@ -133,9 +160,8 @@ class TrainSetupScreen(Screen[None]):
 
     def _choices(self, settings: Settings) -> ComposeResult:
         """Operation and topic checkboxes; the funbox setup yields its own."""
-        yield Label("Operations and topics")
         for token in _TOKENS:
-            box = Checkbox(token, value=_enabled_by_default(token, settings))
+            box = Tick(token, value=_enabled_by_default(token, settings), compact=True)
             self._boxes[token] = box
             yield box
 
@@ -158,17 +184,13 @@ class TrainSetupScreen(Screen[None]):
             stages=_whole(self.query_one("#stages", Input).value, "Stages", 1),
             difficulty=cast(Difficulty, self.query_one("#difficulty", Select).value),
             seed=_whole(seed_text, "Seed") if seed_text else None,
-            strict=self.query_one("#strict", Switch).value,
+            strict=self.query_one("#strict", Checkbox).value,
             **self._chosen(),
         )
         return Challenge(self._settings, clock=self._numbra().clock).create_session(options)
 
     def _numbra(self) -> NumbraApp:
         return cast("NumbraApp", self.app)
-
-
-# Rows a graph task needs for the whole grid plus the answer line and timer (measured at 80 columns).
-GRAPH_MIN_HEIGHT = 39
 
 
 class TrainingScreen(Screen[None]):
@@ -185,7 +207,6 @@ class TrainingScreen(Screen[None]):
     TrainingScreen #answer { width: 40; }
     TrainingScreen #timer { margin: 1 0 0 0; }
     TrainingScreen #feedback { height: auto; margin-top: 1; }
-    TrainingScreen #graph-hint { color: $warning; }
     """
 
     def __init__(self, session: TrainingSession, warnings: Sequence[str] = ()) -> None:
@@ -212,11 +233,6 @@ class TrainingScreen(Screen[None]):
             yield Static(id="stage")
             yield Static(id="example")
             yield Static(id="expression")
-            yield GraphCanvas(id="graph")
-            yield Static(
-                f"Enlarge the terminal to at least {GRAPH_MIN_HEIGHT} rows to see the graph.",
-                id="graph-hint",
-            )
             yield Input(placeholder="Answer, then Enter", id="answer")
             yield ProgressBar(total=1, show_eta=False, show_percentage=False, id="timer")
             yield Static(id="clock")
@@ -247,35 +263,13 @@ class TrainingScreen(Screen[None]):
         problem = plan.problems[problem_number]
         self.query_one("#expression", Static).update(problem.expression)
         self.query_one("#feedback", Static).update("")
-        graph = self.query_one(GraphCanvas)
         answer = self.query_one("#answer", Input)
         answer.value = ""
         answer.disabled = False
-        # A place task is answered on the plot; a read task shows the plot and takes typed text.
-        placing = problem.graph is not None and problem.graph.kind == "place"
-        answer.display = not placing
-        if problem.graph is not None:
-            graph.show(problem.graph)
-        self._fit_graph()
-        if not placing:
-            answer.focus()
+        answer.focus()
         self._example_started = self._numbra().clock()
         self._phase = "answer"
         self._armed = False
-
-    def on_resize(self) -> None:
-        self._fit_graph()
-
-    def _fit_graph(self) -> None:
-        """Show the plot only when the whole grid fits; otherwise ask for a taller terminal."""
-        stage_number, problem_number = self._positions[self._index]
-        spec = self.session.stages[stage_number].problems[problem_number].graph
-        fits = self.size.height >= GRAPH_MIN_HEIGHT
-        graph = self.query_one(GraphCanvas)
-        graph.display = spec is not None and fits
-        self.query_one("#graph-hint", Static).display = spec is not None and not fits
-        if graph.display and spec is not None and spec.kind == "place":
-            graph.focus()
 
     def _tick(self) -> None:
         if self._phase != "answer":
@@ -299,13 +293,6 @@ class TrainingScreen(Screen[None]):
             return
         elapsed = self._numbra().clock() - self._example_started
         self._record(event.value, elapsed, timed_out=False)
-
-    @on(GraphCanvas.Placed)
-    def _placed(self, event: GraphCanvas.Placed) -> None:
-        if self._phase != "answer":
-            return
-        elapsed = self._numbra().clock() - self._example_started
-        self._record(f"{event.x}, {event.y}", elapsed, timed_out=False)
 
     def _record(self, answer: str | None, elapsed: float, timed_out: bool) -> None:
         stage_number, problem_number = self._positions[self._index]

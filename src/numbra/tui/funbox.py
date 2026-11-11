@@ -5,22 +5,22 @@ from __future__ import annotations
 from typing import Any
 
 from textual.app import ComposeResult
-from textual.widgets import Checkbox, Label
 
 from ..config import Settings
 from ..core.funbox import FunboxMode
-from .train import FUNBOX_TITLE, TrainSetupScreen
+from .train import FUNBOX_TITLE, Tick, TrainSetupScreen
 
 
 class FunboxSetupScreen(TrainSetupScreen):
     """Experimental funbox run; the form, timing and summary are the training ones."""
 
     TITLE = FUNBOX_TITLE
+    CHOICES_LABEL = "Funbox modes (at least one)"
+    DEFAULT_CSS = "FunboxSetupScreen #choices { grid-size: 3; }"
 
     def _choices(self, settings: Settings) -> ComposeResult:
-        yield Label("Funbox modes (at least one)")
         for mode in FunboxMode:
-            box = Checkbox(mode.value, value=mode in settings.challenge.funbox_modes)
+            box = Tick(mode.value, value=mode in settings.challenge.funbox_modes, compact=True)
             self._boxes[mode.value] = box
             yield box
 

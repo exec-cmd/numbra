@@ -18,7 +18,7 @@ Advanced topics are bounded: square roots cover perfect squares with roots 2–2
 
 ## Tricks
 
-The `tricks` topic has fourteen tricks; `numbra tricks` lists them. Each problem is a single trick with no extra steps, and its work units are set by the trick and the size of its numbers instead of by the general heuristic, because a trick makes large-looking numbers cheap. Tricks use their own result limits: 400 on `easy`, 2,500 on `normal`, and 10,000 on `hard`. Not every trick exists on every level, and on `hard` trick problems are worth 4–5 units. A session rotates through the available tricks, and tricks do not count toward operation balance.
+The `tricks` topic has nineteen tricks; `numbra tricks` lists them. Each problem is a single trick with no extra steps, and its work units are set by the trick and the size of its numbers instead of by the general heuristic, because a trick makes large-looking numbers cheap. Tricks use their own result limits: 400 on `easy`, 2,500 on `normal`, and 10,000 on `hard`. Not every trick exists on every level, and on `hard` trick problems are worth 4–5 units. A session rotates through the available tricks, and tricks do not count toward operation balance.
 
 ## Funbox (experimental)
 
@@ -31,11 +31,10 @@ Funbox is an experimental set of exercises outside the arithmetic generator. Sel
 | `equations` | linear equations, linear inequalities, and quadratics with integer roots | whole number; `x > 4`; roots as `2, 3` in any order |
 | `logic` | boolean expressions over comparisons | `true` or `false`; `1` and `0` are also accepted |
 | `derivatives` | f′(a) of a polynomial of degree 2 or 3 | whole number |
-| `graphs` | place a point on a line or parabola, or read a line's slope and intercept or a parabola's vertex | `x, y`; `k, b`; `h, k` |
 
-Only `fractions` produces non-integer answers. Answers are case-insensitive for `true` and `false`. Inequalities accept `>`, `<`, `>=`, `<=`, `≥`, and `≤`, with or without `x` and spaces (for example `>4`). Roots and points are typed as a comma-separated list. `graphs` needs the interactive mode, so `numbra challenge` rejects it.
+Only `fractions` produces non-integer answers. Answers are case-insensitive for `true` and `false`. Inequalities accept `>`, `<`, `>=`, `<=`, `≥`, and `≤`, with or without `x` and spaces (for example `>4`). Roots are typed as a comma-separated list.
 
-In the interactive mode, the **Funbox** menu entry opens the setup form with one checkbox per mode, starting from `[funbox] modes`; at least one mode must be checked. A graph task shows its figure on a grid from -10 to 10. In a place task, the arrow keys move a cursor and `Enter` sends the point. In a read task, the figure is only shown and you type the answer. The grid needs a terminal at least 39 rows tall; in a shorter one the task shows a hint instead of the grid, and the grid appears once the window is enlarged.
+In the interactive mode, the **Funbox** menu entry opens the setup form with one checkbox per mode, starting from `[funbox] modes`; at least one mode must be checked.
 
 Funbox sessions use the same stages, soft or strict timing, and scoring as ordinary challenges, without operation bonuses. Difficulty changes the number ranges and the number of steps in each mode.
 

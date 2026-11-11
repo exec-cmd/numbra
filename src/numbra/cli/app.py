@@ -34,7 +34,7 @@ from ..core.challenge import (
     TrainingSession,
     grade_for_score,
 )
-from ..core.funbox import FunboxMode, parse_funbox_modes
+from ..core.funbox import parse_funbox_modes
 from ..core.generator import trick_levels
 from ..core.models import (
     Difficulty,
@@ -145,8 +145,6 @@ def challenge(
         selected_operations = _parse_operations(operations)
         funbox_modes = parse_funbox_modes(funbox) if funbox is not None else None
         if funbox_modes is not None:
-            if FunboxMode.GRAPHS in funbox_modes:
-                raise ValueError("graphs requires the interactive mode (run `numbra`)")
             if selected_operations is not None or advanced is not None or identities is not None:
                 raise ValueError("--funbox cannot be combined with -o, --advanced or --identities")
         settings = ConfigManager().load_or_create()

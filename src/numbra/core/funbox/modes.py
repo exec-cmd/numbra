@@ -8,7 +8,6 @@ class FunboxMode(StrEnum):
     SUBSTITUTION = "substitution"
     EQUATIONS = "equations"
     LOGIC = "logic"
-    GRAPHS = "graphs"
     DERIVATIVES = "derivatives"
 
 

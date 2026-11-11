@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
 from fractions import Fraction
-from typing import Literal
 
 from .expressions import Expr, parse_expression
 
@@ -64,19 +63,9 @@ def parse_operation_selection(values: Iterable[str]) -> tuple[Operation | Topic,
     return tuple(selected)
 
 
-# Ordinary exercises are integers; funbox adds exact fractions, booleans, ordered pairs (points,
-# slope and intercept), sets of roots and canonical inequalities such as "x>4".
-type Answer = int | Decimal | Fraction | bool | tuple[Fraction, ...] | frozenset[Fraction] | str
-
-
-@dataclass(frozen=True, slots=True)
-class GraphSpec:
-    """Figure of a graphs task; coefficients run from the constant term up (ascending powers)."""
-
-    kind: Literal["place", "read"]
-    figure: Literal["line", "parabola"]
-    coefficients: tuple[int, ...]
-    x: int | None = None
+# Ordinary exercises are integers; funbox adds exact fractions, booleans, sets of roots and
+# canonical inequalities such as "x>4".
+type Answer = int | Decimal | Fraction | bool | frozenset[Fraction] | str
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,7 +79,6 @@ class Problem:
     solution_steps: tuple[str, ...] = ()
     work_units: int | None = None
     topics: tuple[Topic, ...] = ()
-    graph: GraphSpec | None = None
 
     def as_tree(self) -> Expr:
         return self.tree if self.tree is not None else parse_expression(self.expression)
@@ -118,6 +106,4 @@ def format_answer(expected: Answer) -> str:
         return expected if parsed is None else f"x {parsed[0]} {parsed[1]}"
     if isinstance(expected, frozenset):
         return ", ".join(str(item) for item in sorted(expected))
-    if isinstance(expected, tuple):
-        return ", ".join(str(item) for item in expected)
     return str(expected)

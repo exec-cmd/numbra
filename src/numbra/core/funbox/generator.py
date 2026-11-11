@@ -5,7 +5,7 @@ from collections import Counter
 from collections.abc import Callable
 
 from ..models import Difficulty, Problem
-from . import derivatives, equations, fraction_tasks, graphs, logic, substitution
+from . import derivatives, equations, fraction_tasks, logic, substitution
 from .modes import FunboxMode
 
 # Work-unit bands match the arithmetic generator, so scoring and the time budget stay comparable.
@@ -22,7 +22,6 @@ _MAKERS: dict[FunboxMode, Callable[[random.Random, Difficulty, int], Problem]] =
     FunboxMode.SUBSTITUTION: substitution.make,
     FunboxMode.EQUATIONS: equations.make,
     FunboxMode.LOGIC: logic.make,
-    FunboxMode.GRAPHS: graphs.make,
     FunboxMode.DERIVATIVES: derivatives.make,
 }
 

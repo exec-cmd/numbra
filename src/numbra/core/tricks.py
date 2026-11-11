@@ -66,6 +66,21 @@ TRICKS = (
     TrickInfo(
         "square-near-50", "25 plus the offset, then the offset squared.", "48 * 48 = 23|04 = 2304"
     ),
+    TrickInfo(
+        "square-near-round",
+        "Move both factors to the round neighbour and back, then add the step squared.",
+        "38 * 38 = 40 * 36 + 4 = 1444",
+    ),
+    TrickInfo(
+        "difference-of-squares",
+        "Around a round middle: the middle squared minus the offset squared.",
+        "48 * 52 = 2500 - 4 = 2496",
+    ),
+    TrickInfo("times-15", "Multiply by 10, then add half of that.", "47 * 15 = 470 + 235 = 705"),
+    TrickInfo("times-125", "Multiply by 1000, then divide by 8.", "48 * 125 = 48000 / 8 = 6000"),
+    TrickInfo(
+        "divide-by-4-or-8", "Halve twice for 4, three times for 8.", "372 / 4 = 186 / 2 = 93"
+    ),
 )
 
 
@@ -90,6 +105,16 @@ def _candidates() -> Iterator[tuple[Expr, str, int]]:
     for n in range(41, 60):
         if n not in (45, 50, 55):
             yield B("*", N(n), N(n)), "square-near-50", 3 if abs(n - 50) <= 3 else 4
+    # Squares near 50 and 100 are claimed above; the rest go through the nearest ten.
+    for n in _plain(13, 100):
+        if n % 5:
+            step = min(n % 10, 10 - n % 10)
+            yield B("*", N(n), N(n)), "square-near-round", (2 if n < 20 else 3) + (step > 2)
+    # Before round-and-adjust, which would otherwise take 49 * 51.
+    for middle in range(20, 110, 10):
+        for offset in range(1, 5):
+            units = 2 if middle <= 30 else 3 if middle <= 60 else 4
+            yield B("*", N(middle - offset), N(middle + offset)), "difference-of-squares", units
     for n in _plain(12, 2000):
         units = (1 if n % 2 == 0 else 2) if n < 100 else 3 if n < 1000 else 4
         yield B("*", N(n), N(5)), "times-5", units
@@ -97,6 +122,12 @@ def _candidates() -> Iterator[tuple[Expr, str, int]]:
         yield B("*", N(n), N(25)), "times-25", (2 if n % 4 == 0 else 3) if n < 100 else 4
     for n in _plain(12, 200):
         yield B("*", N(n), N(50)), "times-50", (1 if n % 2 == 0 else 2) if n < 100 else 3
+    # After times-25, which keeps 25 * 125.
+    for n in _plain(12, 81):
+        yield B("*", N(n), N(125)), "times-125", 3 if n % 8 == 0 else 4
+    # Odd factors only: double-halve owns an even number times 15.
+    for n in _plain(11, 667, 2):
+        yield B("*", N(n), N(15)), "times-15", 2 if n < 100 else 3
     for n in _plain(12, 910):
         units = (1 if n // 10 + n % 10 < 10 else 2) if n < 100 else 4
         yield B("*", N(n), N(11)), "times-11", units
@@ -138,6 +169,12 @@ def _candidates() -> Iterator[tuple[Expr, str, int]]:
             if dividend % 100:
                 units = small if dividend < 1000 else large
                 yield B("/", N(dividend), N(divisor)), "divide-by-5-or-25", units
+    for divisor, small, large in ((4, 2, 3), (8, 3, 4)):
+        for quotient in range(13, 1250):
+            dividend = divisor * quotient
+            if dividend % 100:
+                units = small if dividend < 1000 else large
+                yield B("/", N(dividend), N(divisor)), "divide-by-4-or-8", units
 
 
 @lru_cache(maxsize=8)

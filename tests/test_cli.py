@@ -330,8 +330,9 @@ def test_results_weak_spots_list_missed_operations(monkeypatch) -> None:
 
     monkeypatch.setattr(cli_module, "timed_prompt", wrong_prompt)
     monkeypatch.setattr(cli_module, "cooldown", no_cooldown)
+    # Seed 2 gives three examples with five additions, enough for a weak spot (five attempts).
     challenge = runner.invoke(
-        app, ["challenge", "-t", "1", "-n", "1", "-o", "+", "--cooldown", "1"]
+        app, ["challenge", "-t", "1", "-n", "1", "-o", "+", "--cooldown", "1", "-S", "2"]
     )
     assert challenge.exit_code == 0, challenge.stdout
 
@@ -357,14 +358,6 @@ def test_sparkline_maps_scores_to_block_characters() -> None:
 
 def _compact(text: str) -> str:
     return re.sub(r"\s+", "", text)
-
-
-def test_funbox_graphs_requires_the_interactive_mode() -> None:
-    result = runner.invoke(app, ["challenge", "--funbox", "logic,graphs"])
-    assert result.exit_code == 2
-    assert _compact("graphs requires the interactive mode (run `numbra`)") in _compact(
-        result.stdout
-    )
 
 
 def test_funbox_rejects_unknown_modes_and_ordinary_selection() -> None:

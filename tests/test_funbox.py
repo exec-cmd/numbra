@@ -12,7 +12,6 @@ from numbra.core.challenge import Challenge, ChallengeOptions, _matches_answer
 from numbra.core.funbox import (
     FunboxGenerator,
     FunboxMode,
-    GraphSpec,
     format_answer,
     parse_funbox_modes,
 )
@@ -31,7 +30,7 @@ def _integral(answer: object) -> bool:
         return True
     if isinstance(answer, Fraction):
         return answer.denominator == 1
-    if isinstance(answer, (tuple, frozenset)):
+    if isinstance(answer, frozenset):
         return all(item.denominator == 1 for item in answer)
     if isinstance(answer, str):
         return parse_inequality(answer) is not None
@@ -71,7 +70,6 @@ def test_problems_carry_funbox_fields_and_work_units_in_band(
         assert problem.operations == ()
         assert problem.topics == ()
         assert low <= problem.work_units <= high
-        assert (problem.graph is not None) is (mode is FunboxMode.GRAPHS)
 
 
 @pytest.mark.parametrize(("mode", "level"), INTEGER_CASES)
@@ -93,26 +91,6 @@ def test_every_answer_is_accepted_in_its_display_form(mode: FunboxMode, level: D
     _, problems = _generate(mode, level)
     for problem in problems:
         assert _matches_answer(format_answer(problem.answer), problem.answer), problem.expression
-
-
-def test_graph_points_stay_in_the_grid() -> None:
-    for level in Difficulty:
-        _, problems = _generate(FunboxMode.GRAPHS, level, count=60)
-        for problem in problems:
-            graph = problem.graph
-            assert graph is not None
-            if graph.kind == "place":
-                x, y = problem.answer
-                assert -10 <= x <= 10 and -10 <= y <= 10
-                assert graph.x == x
-                assert sum(c * graph.x**p for p, c in enumerate(graph.coefficients)) == y
-            elif graph.figure == "parabola":
-                h, k = problem.answer
-                assert -10 <= h <= 10 and -10 <= k <= 10
-            else:
-                slope, intercept = problem.answer
-                assert graph.coefficients == (intercept, slope)
-                assert all(abs(slope * x + intercept) <= 10 for x in range(-4, 5))
 
 
 def test_repeats_are_allowed_only_after_the_mode_is_exhausted(monkeypatch) -> None:
@@ -253,15 +231,6 @@ def test_other_words_are_not_booleans(value: str) -> None:
     assert not _matches_answer(value, False)
 
 
-def test_ordered_pairs_keep_their_order() -> None:
-    expected = (Fraction(4), Fraction(5))
-    assert _matches_answer("4, 5", expected)
-    assert _matches_answer("(4, 5)", expected)
-    assert not _matches_answer("5, 4", expected)
-    assert not _matches_answer("4", expected)
-    assert not _matches_answer("4, 5, 6", expected)
-
-
 def test_fraction_and_decimal_input_is_compared_exactly() -> None:
     assert _matches_answer("11/12", Fraction(11, 12))
     assert _matches_answer("0.75", Fraction(3, 4))
@@ -275,17 +244,9 @@ def test_format_answer_matches_the_documented_forms() -> None:
     assert format_answer(Decimal("3.5")) == "3.5"
     assert format_answer(True) == "true"
     assert format_answer(False) == "false"
-    assert format_answer((Fraction(4), Fraction(5))) == "4, 5"
     assert format_answer(frozenset({Fraction(3), Fraction(2)})) == "2, 3"
     assert format_answer("x>4") == "x > 4"
     assert format_answer("x>=-2") == "x >= -2"
-
-
-def test_graph_spec_is_frozen_and_typed() -> None:
-    spec = GraphSpec("place", "line", (-3, 2), 4)
-    assert spec.coefficients == (-3, 2)
-    with pytest.raises(AttributeError):
-        spec.x = 5  # type: ignore[misc]
 
 
 def test_canonical_key_uses_the_display_text_for_funbox() -> None:

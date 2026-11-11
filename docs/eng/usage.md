@@ -2,25 +2,25 @@
 
 ## Interactive mode
 
-Run `numbra` with no arguments in a terminal to open the interactive interface. The menu offers **Train**, **Results**, **Settings**, **Tricks** and **Funbox** (experimental, see [Training rules](training.md#funbox-experimental)); `q` or **Quit** exits. Train walks through a setup form (difficulty, duration, stages, operations and topics, strict mode, seed), then the timed run, then the summary. The form starts from your saved settings. Without a terminal, for example when output is piped, `numbra` prints the help text instead. Every command in this page works the same way.
+Run `numbra` with no arguments in a terminal to open the interactive interface. The menu offers **Train**, **Results**, **Settings**, **Tricks** and **Funbox** (experimental, see [Training rules](training.md#funbox-experimental)); `q` or **Quit** exits. Train walks through a setup form (difficulty, duration, stages, operations and topics, strict mode, seed), then the timed run, then the summary. The form starts from your saved settings. Tricks lists every trick with an example and the levels it appears on; the full rule of the selected row is shown below the table. Without a terminal, for example when output is piped, `numbra` prints the help text instead. Every command in this page works the same way.
 
 Keys during a training:
 
 - `Enter` submits the answer. After the cooldown the next example appears.
 - `Esc` pressed twice cancels the training. Nothing is saved.
-- In a Funbox place task, the arrow keys move the cursor on the plot and `Enter` sends the point.
 - In the summary, `Enter` or `Esc` returns to the menu. The setup forms (Train and Funbox), Settings and Tricks screens close with `Esc`.
+- `Ctrl+Q` quits from any screen. An unfinished training is not saved.
 
 Settings lists every key of `numbra.toml` with its effective value, and the file path at the top. `Enter` on a row opens an edit line holding the value as a TOML literal, such as `hard`, `42` or `["+", "-"]`. `Enter` saves it. A value the file would reject stays on screen with the error, and nothing is written until it is fixed or `Esc` cancels the edit. `d` or `Delete` removes the key, so the built-in default applies again. Each change is written to `numbra.toml` at once, and the next Train setup uses it.
-- `Ctrl+Q` quits from any screen. An unfinished training is not saved.
 
 The Results screen shows the same saved data as `numbra results`, on tabs:
 
-- **History** lists completed sessions, newest first. Select a row with `Enter` to see every example of that session: stage, kind, expression, your answer, the correct answer, result, time and score. `Esc` returns to the list.
-- **Progress** shows the score trend, oldest to newest, with the best, last and average score. It needs two sessions.
-- **Breakdown**, **Weak spots**, **Records** and **Tricks** match the tables of `numbra results`.
+- **Overview** shows the totals (sessions, examples, accuracy, time per answer, streak), the score trend with the best and average score (it needs two sessions), the last session, and up to three areas to practise next. An area appears there once it has at least five attempts and a miss, as in the weak spots of `numbra results`.
+- **History** lists completed sessions, newest first, with the level, correct answers, score, grade, time per answer and length. Select a row with `Enter` to see every example of that session: stage, expression, your answer, the correct answer, result, time and score. `Esc` returns to the list.
+- **Breakdown** shows accuracy, attempts and the time per correct answer by difficulty, operation, topic and trick.
+- **Records** lists the best score and best time per answer for each level and operation set, as `numbra results` does.
 - **Funbox** lists the mode totals and the completed funbox sessions; `Enter` on a session opens its examples, as in History. Funbox results are not part of the other tabs.
-- The summary above the tabs shows sessions, examples, accuracy, average answer time, streak and the grade of the last session. History and Progress cover the 1000 newest sessions.
+- History and the trend cover the 1000 newest sessions; the totals cover all of them.
 
 `r` reloads the data, and `Esc` returns to the menu. The screen cannot reset results; use `numbra results --reset`.
 
@@ -54,7 +54,7 @@ Use `numbra --help`, `numbra --version`, or `numbra challenge --help` for comman
 | `--cooldown SECONDS` | 2 seconds | Pause between examples; accepts 1–3 seconds. |
 | `--advanced` / `--no-advanced` | Saved settings | Enable all operations and advanced topics, or turn off configured advanced topics; `tricks` is unaffected. |
 | `--identities` / `--no-identities` | Saved setting | Independently enable or disable numerical identities. |
-| `--funbox MODES` | Off | Experimental: run only the listed modes, such as `logic,equations`. Cannot be combined with `-o`, `--advanced`, or `--identities`. `graphs` needs the interactive mode and is rejected here. |
+| `--funbox MODES` | Off | Experimental: run only the listed modes, such as `logic,equations`. Cannot be combined with `-o`, `--advanced`, or `--identities`. |
 
 For example:
 
