@@ -2,6 +2,7 @@
 
 import asyncio
 import sqlite3
+from dataclasses import replace
 from io import StringIO
 
 from rich.console import Console
@@ -20,7 +21,7 @@ from textual.widgets import DataTable, Static, TabbedContent
 from numbra.core.challenge import Challenge, ChallengeOptions
 from numbra.core.models import Operation
 from numbra.core.report import METRIC_HELP
-from numbra.core.stats import Stats
+from numbra.core.stats import GroupStats, Stats
 from numbra.tui.results import LegendScreen, ResultsScreen, SessionScreen
 
 
@@ -97,6 +98,29 @@ def test_funbox_does_not_change_overview_session_count(tmp_path) -> None:
         async with app.run_test() as pilot:
             results = await open_results(pilot, app)
             assert "0" in plain_text(results.query_one("#tile-sessions", Static))
+
+    asyncio.run(scenario())
+
+
+def test_russian_overview_translates_session_label_and_recommendation(
+    tmp_path, monkeypatch
+) -> None:
+    save_completed_session(tmp_path)
+    monkeypatch.setattr(
+        Stats,
+        "weak_spots",
+        lambda self, min_attempts=5, limit=3: [GroupStats("operation", "*", 6, 2, 0.5)],
+    )
+    settings = replace(make_settings(tmp_path), language="ru")
+    app = make_app(tmp_path, settings, FakeClock())
+
+    async def scenario() -> None:
+        async with app.run_test() as pilot:
+            results = await open_results(pilot, app)
+            assert "сессия" in plain_text(results.query_one("#tile-sessions", Static))
+            practice = plain_text(results.query_one("#practice", Static))
+            assert "умножение" in practice
+            assert "multiplication" not in practice
 
     asyncio.run(scenario())
 

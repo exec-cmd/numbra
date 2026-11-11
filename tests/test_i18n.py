@@ -44,6 +44,11 @@ def test_plural_forms() -> None:
     }
     for count, form in expected.items():
         assert tn(count, "{n} day", "{n} days") == form
+    assert [tn(count, "session", "sessions") for count in (1, 2, 5)] == [
+        "сессия",
+        "сессии",
+        "сессий",
+    ]
     set_language("en")
     assert tn(1, "day", "days") == "day"
     assert tn(2, "day", "days") == "days"

@@ -22,7 +22,7 @@ def percent(value: float) -> str:
 
 
 def seconds(value: float | None) -> str:
-    return "—" if value is None else f"{value:.1f} s"
+    return "—" if value is None else t("{value} s").format(value=f"{value:.1f}")
 
 
 def days(count: int) -> str:

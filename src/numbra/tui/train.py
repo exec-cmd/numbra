@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, cast
 
+from rich.segment import Segment
 from rich.table import Table
 from rich.text import Text
 from textual import on
@@ -13,6 +14,7 @@ from textual.binding import Binding
 from textual.containers import Center, Horizontal, Vertical, VerticalScroll
 from textual.content import Content
 from textual.screen import Screen
+from textual.strip import Strip
 from textual.timer import Timer
 from textual.widgets import (
     Button,
@@ -27,7 +29,7 @@ from textual.widgets import (
     SelectionList,
     Static,
 )
-from textual.widgets.option_list import Option
+from textual.widgets.option_list import Option, OptionDoesNotExist
 
 from ..cli.summary import summary_card
 from ..config import ConfigError, DifficultyConfig, Settings
@@ -77,7 +79,23 @@ class Tick(Checkbox):
 
 
 class ChoiceList(SelectionList[str]):
+    """Selection list drawn with [x] and [ ], so its state does not depend on colour."""
+
     BINDINGS = [Binding("enter", "screen.next_step", "Next", show=False)]
+
+    def render_line(self, y: int) -> Strip:
+        # shortcut: replaces the 3-cell ▐X▌ button SelectionList draws in Textual 8.2.8;
+        # ANSI themes cannot hide the X by colour. Re-check on a Textual upgrade.
+        strip = super().render_line(y)
+        segments = list(strip)
+        try:
+            selection = self.get_option_at_index(self.scroll_offset.y + y)
+        except OptionDoesNotExist:
+            return strip
+        if len(segments) < 4:
+            return strip
+        mark = "[x]" if selection.value in self.selected else "[ ]"
+        return Strip([Segment(mark, segments[1].style), *segments[3:]])
 
 
 def _whole(text: str, label: str, minimum: int | None = None) -> int:
@@ -97,27 +115,31 @@ class TrainSetupScreen(Screen[None]):
         Binding("escape", "back", "Back"),
         Binding("ctrl+s", "start", "Start"),
         Binding("1", "edit_step(1)", "Edit level", show=False),
-        Binding("2", "edit_step(2)", "Edit practise", show=False),
+        Binding("2", "edit_step(2)", "Edit topics", show=False),
         Binding("3", "edit_step(3)", "Edit time", show=False),
-        Binding("4", "edit_step(4)", "Edit start", show=False),
+        Binding("4", "edit_step(4)", "Edit preset", show=False),
     ]
     SUB_TITLE = "New training"
+    # CSS, not DEFAULT_CSS: the app-wide OptionList highlight would win over DEFAULT_CSS,
+    # and in ANSI themes it is bold only, which the bold level names already are; the step bar uses cyan too.
+    CSS = """
+    TrainSetupScreen #presets > .option-list--option-highlighted { color: ansi_cyan; text-style: bold; }
+    TrainSetupScreen #difficulty > .option-list--option-highlighted { color: ansi_cyan; text-style: bold; }
+    """
     HAS_START_STEP = True
-    CHOICE_STEP_LABEL = "Practise"
+    CHOICE_STEP_LABEL = "Topics"
     STEP_IDS = ("step-start", "step-level", "step-practise", "step-time", "step-review")
-    STEP_LABELS = ("Start", "Level", "Practise", "Time", "Review")
+    STEP_LABELS = ("Preset", "Level", "Topics", "Time", "Review")
     DEFAULT_CSS = """
-    TrainSetupScreen #wizard { align: center middle; height: 1fr; }
+    TrainSetupScreen #wizard { align: center top; height: 1fr; margin-top: 1; }
     TrainSetupScreen #steps { width: 100%; max-width: 72; height: auto; }
     TrainSetupScreen .step { width: 100%; height: auto; }
     TrainSetupScreen #stepbar { width: 100%; max-width: 72; height: 1; margin: 0 0 1 0; text-align: center; }
     TrainSetupScreen .section { border: round $panel-lighten-2; height: auto; padding: 0 1; }
     TrainSetupScreen #presets { height: auto; max-height: 7; border: none; padding: 0; }
     TrainSetupScreen #presets .option-list--option { height: 1; }
-    TrainSetupScreen #presets .option-list--option-highlighted { color: $accent; }
     TrainSetupScreen #difficulty { height: auto; border: none; padding: 0; }
     TrainSetupScreen #difficulty .option-list--option { height: 2; }
-    TrainSetupScreen #difficulty .option-list--option-highlighted { color: $accent; }
     TrainSetupScreen #choices { height: auto; max-height: 10; }
     TrainSetupScreen .row { height: 1; }
     TrainSetupScreen .row Label { width: 11; height: 1; content-align: left middle; }
@@ -166,11 +188,12 @@ class TrainSetupScreen(Screen[None]):
                 if self.HAS_START_STEP:
                     with Vertical(id="step-start", classes="step"):
                         with Vertical(classes="section") as presets_box:
-                            presets_box.border_title = t("Start", "step")
+                            presets_box.border_title = t("Preset", "step")
                             yield self._preset_list(self._settings)
                         yield Static(t("Enter picks, Esc returns to the menu"), classes="hint")
                 with Vertical(id="step-level", classes="step"):
                     yield self._difficulty_list(challenge.difficulty, challenge.profiles)
+                    yield Static(t("Enter — choose, Esc — back"), classes="hint")
                     yield Static("", classes="step-error", id="level-error")
                 with Vertical(id="step-practise", classes="step"):
                     with Vertical(classes="section") as practise:
@@ -178,6 +201,7 @@ class TrainSetupScreen(Screen[None]):
                         self._choices = self._choice_list(self._settings)
                         yield self._choices
                     yield Static("", classes="step-error", id="practise-error")
+                    yield Static(t("Space toggles, Enter goes on, Esc goes back"), classes="hint")
                 with Vertical(id="step-time", classes="step"):
                     with Vertical(classes="section") as session:
                         session.border_title = t("Time")
@@ -202,6 +226,9 @@ class TrainSetupScreen(Screen[None]):
                             id="strict",
                         )
                     yield Static("", classes="step-error", id="time-error")
+                    yield Static(
+                        t("Tab moves between fields, Enter goes on, Esc goes back"), classes="hint"
+                    )
                 with Vertical(id="step-review", classes="step"):
                     with Vertical(classes="section") as review:
                         review.border_title = t("Review")
@@ -480,8 +507,8 @@ class TrainSetupScreen(Screen[None]):
                     )
                 )
                 break
-        rows.extend(
-            (
+        if settings.challenge.duration_minutes != 2:
+            rows.append(
                 (
                     "quick",
                     "Quick",
@@ -493,7 +520,10 @@ class TrainSetupScreen(Screen[None]):
                         "stages": settings.challenge.stages,
                         "seed": "",
                     },
-                ),
+                )
+            )
+        rows.extend(
+            (
                 (
                     "settings",
                     "From settings",
@@ -704,7 +734,7 @@ class TrainingScreen(Screen[None]):
         remaining = limit - elapsed
         self.query_one("#timer", ProgressBar).update(total=limit, progress=max(0.0, remaining))
         self.query_one("#clock", Static).update(
-            f"{remaining:.1f} s"
+            t("{value} s").format(value=f"{remaining:.1f}")
             if remaining >= 0
             else t("+{seconds} s over").format(seconds=f"{-remaining:.1f}")
         )

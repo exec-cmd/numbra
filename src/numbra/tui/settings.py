@@ -147,7 +147,7 @@ class SettingsScreen(Screen[None]):
         translate_bindings(self)
 
     def compose(self) -> ComposeResult:
-        path = f"Config file: {self._paths().main}".replace(str(Path.home()), "~", 1)
+        path = str(self._paths().main).replace(str(Path.home()), "~", 1)
         yield Header()
         yield Static(t("Config file: {path}").format(path=path), id="path")
         yield DataTable(cursor_type="row", zebra_stripes=True, id="settings")

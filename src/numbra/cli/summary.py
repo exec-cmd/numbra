@@ -18,7 +18,7 @@ def _percent(value: float) -> str:
 
 
 def _seconds(value: float | None) -> str:
-    return "—" if value is None else f"{value:.1f} s"
+    return "—" if value is None else t("{value} s").format(value=f"{value:.1f}")
 
 
 def _days(count: int) -> str:

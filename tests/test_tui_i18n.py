@@ -44,6 +44,8 @@ def test_tui_screens_render_in_russian(tmp_path) -> None:
             await pilot.pause()
             assert isinstance(app.screen, TrainingScreen)
             training = app.screen
+            training._tick()
+            assert " с" in plain_text(training.query_one("#clock", Static))
             training._record(str(training.session.stages[0].problems[0].answer), 0.5, False)
             assert "Верно" in str(training.query_one("#feedback", Static).render())
             gate.set()
@@ -88,7 +90,25 @@ def test_tui_screens_render_in_russian(tmp_path) -> None:
                         await pilot.pause()
                 if isinstance(screen, TricksScreen):
                     assert "Умножьте" in str(screen.query_one("#rule", Static).render())
+                    table = screen.query_one(DataTable)
+                    assert any(
+                        any(mark in str(table.get_row_at(index)[2]) for mark in ("Л", "Ср", "Сл"))
+                        for index in range(table.row_count)
+                    )
+                    assert all(
+                        not any(mark in str(table.get_row_at(index)[2]) for mark in ("E", "N", "H"))
+                        for index in range(table.row_count)
+                    )
+                    assert any(
+                        "×" in str(table.get_row_at(index)[1]) for index in range(table.row_count)
+                    )
+                if isinstance(screen, SettingsScreen):
+                    assert (
+                        plain_text(screen.query_one("#path", Static)).count("Файл конфигурации:")
+                        == 1
+                    )
                 if isinstance(screen, ResultsScreen):
+                    assert "сесс" in plain_text(screen.query_one("#tile-sessions", Static))
                     tabs = screen.query_one(TabbedContent)
                     for active in ("overview-tab", "sessions-tab", "skills-tab"):
                         tabs.active = active
@@ -103,6 +123,9 @@ def test_tui_screens_render_in_russian(tmp_path) -> None:
                         record = screen._sessions[0]
                         app.push_screen(SessionScreen(record))
                         await pilot.pause()
+                        assert " из " in plain_text(
+                            app.screen.query_one("#session-summary", Static)
+                        )
                         await pilot.press("escape")
                         await pilot.pause()
                 await pilot.press("escape")

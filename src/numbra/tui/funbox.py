@@ -19,7 +19,7 @@ class FunboxSetupScreen(TrainSetupScreen):
     TITLE = FUNBOX_TITLE
     HAS_START_STEP = False
     CHOICE_STEP_LABEL = "Modes"
-    STEP_LABELS = ("Start", "Level", "Modes", "Time", "Review")
+    STEP_LABELS = ("Preset", "Level", "Modes", "Time", "Review")
 
     def _choice_list(self, settings: Settings) -> ChoiceList:
         return ChoiceList(

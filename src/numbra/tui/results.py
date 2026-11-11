@@ -260,7 +260,11 @@ class ResultsScreen(Screen[None]):
         aggregate = stats.aggregate()
         current, longest = stats.streak(self._numbra().today())
         tiles = {
-            "sessions": (str(aggregate.completed_trainings), t("sessions"), t("completed")),
+            "sessions": (
+                str(aggregate.completed_trainings),
+                tn(aggregate.completed_trainings, "session", "sessions"),
+                t("completed"),
+            ),
             "accuracy": (percent(aggregate.accuracy), t("accuracy"), t("share correct")),
             "time": (
                 seconds(aggregate.average_correct_seconds),
@@ -337,9 +341,9 @@ class ResultsScreen(Screen[None]):
         weak = stats.weak_spots()
         practice = Text.assemble((f"{t('Practise next')}\n", "bold"))
         if weak:
-            width = max(len(area_name(item.name)) for item in weak)
+            width = max(len(t(area_name(item.name))) for item in weak)
             for item in weak:
-                practice.append(f"{area_name(item.name):<{width}}  ")
+                practice.append(f"{t(area_name(item.name)):<{width}}  ")
                 practice.append_text(_bar(item.accuracy))
                 practice.append("\n")
         else:
@@ -426,7 +430,7 @@ class SessionScreen(Screen[None]):
             Text.assemble(
                 grade_text(record.score_percent),
                 (f" {percent(record.score_percent)}", "bold"),
-                f"   {record.correct_answers} of {record.total_examples} correct   "
+                f"   {t('{correct} of {total} correct').format(correct=record.correct_answers, total=record.total_examples)}   "
                 f"{_setup(record, funbox=self._funbox)}   {_when(record, today)}",
             ),
             id="session-summary",

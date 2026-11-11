@@ -12,7 +12,7 @@ from textual.widgets import DataTable, Footer, Header, Static
 from ..core.generator import trick_levels
 from ..core.tricks import TRICKS
 from ..i18n import t
-from .style import translate_bindings
+from .style import display_expression, translate_bindings
 
 
 class TricksScreen(Screen[None]):
@@ -41,8 +41,8 @@ class TricksScreen(Screen[None]):
         for trick in TRICKS:
             table.add_row(
                 t(trick.id, "trick"),
-                trick.example.split(" = ", 1)[0],
-                " ".join(level.value[0].upper() for level in levels.get(trick.id, ())),
+                display_expression(trick.example.split(" = ", 1)[0]),
+                " ".join(t(level.value[0].upper(), "level") for level in levels.get(trick.id, ())),
             )
         table.focus()
 
@@ -55,7 +55,7 @@ class TricksScreen(Screen[None]):
                 "\n",
                 t(trick.rule),
                 "\n",
-                (trick.example, "dim"),
+                (display_expression(trick.example), "dim"),
                 "\n",
                 (
                     f"{t('Levels')}: {', '.join(t(level.value, 'difficulty') for level in trick_levels().get(trick.id, ()))}",

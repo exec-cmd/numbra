@@ -2,6 +2,7 @@ import asyncio
 
 from test_tui import FakeClock, make_app, make_settings
 
+from numbra.i18n import set_language
 from numbra.tui.style import days, display_expression, grade_text, seconds
 
 
@@ -20,6 +21,12 @@ def test_days_uses_singular_for_one_day() -> None:
 def test_seconds_formats_values_and_missing_time() -> None:
     assert seconds(None) == "—"
     assert seconds(1.25) == "1.2 s"
+
+
+def test_seconds_uses_russian_unit() -> None:
+    set_language("ru")
+    assert seconds(1.25) == "1.2 с"
+    set_language("en")
 
 
 def test_grade_text_uses_grade_for_score() -> None:
