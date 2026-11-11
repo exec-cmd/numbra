@@ -44,7 +44,13 @@ from ..core.models import (
     format_answer,
     parse_operation_selection,
 )
-from ..core.report import RECOMMENDATION_TEXT, TrainingReport, build_report
+from ..core.report import (
+    RECOMMENDATION_TEXT,
+    TrainingReport,
+    area_name,
+    build_report,
+    setup_label,
+)
 from ..core.stats import GroupStats, Stats
 from ..core.tricks import TRICKS
 from .input import cooldown, timed_prompt
@@ -357,24 +363,26 @@ def _grade_markup(score_percent: float) -> str:
 
 
 def _seconds(value: float | None) -> str:
-    return "—" if value is None else f"{value:.2f}s"
+    return "—" if value is None else f"{value:.1f} s"
 
 
-def _group_table(title: str, sections: Sequence[Sequence[GroupStats]]) -> Table:
+def _group_table(title: str, sections: Sequence[tuple[str, Sequence[GroupStats]]]) -> Table:
     table = Table(title=title)
-    table.add_column("Group", no_wrap=True)
-    for heading in ("Attempts", "Accuracy", "Avg correct"):
+    table.add_column("Area", no_wrap=True)
+    for heading in ("Attempts", "Accuracy", "Time"):
         table.add_column(heading, justify="right")
-    for section in sections:
+    for heading, section in sections:
         if not section:
             continue
         if table.row_count:
             table.add_section()
+        if heading:
+            table.add_row(f"[bold]{heading}[/bold]", "", "", "")
         for item in section:
             table.add_row(
-                f"{item.kind}: {item.name}",
+                area_name(item.name),
                 str(item.attempts),
-                f"{item.accuracy:.1%}",
+                f"{item.accuracy:.0%}",
                 _seconds(item.average_correct_seconds),
             )
     return table
@@ -409,85 +417,78 @@ def results(
         return
     aggregate = stats.aggregate()
     current, longest = stats.streak(date.today())
-    console.print(
-        Panel(
-            f"[bold]Sessions:[/bold] {aggregate.completed_trainings} · "
-            f"[bold]Examples:[/bold] {aggregate.total_examples} · "
-            f"[bold]Accuracy:[/bold] {aggregate.accuracy:.1%} · "
-            f"[bold]Average answer:[/bold] {aggregate.average_response_seconds:.2f}s\n"
-            f"[bold]Streak:[/bold] {_days(current)} (best {longest}) · "
-            f"[bold]Last session:[/bold] {_grade_markup(rows[0].score_percent)} "
-            f"({rows[0].score_percent:.1%})\n"
-            f"[bold]Score trend:[/bold] "
-            f"{_sparkline([row.score_percent for row in reversed(rows)])} · "
-            f"[bold]Timeouts:[/bold] {aggregate.timeouts}",
-            title="Results",
-        )
+    summary = Table.grid(padding=(0, 3))
+    summary.add_column()
+    summary.add_column()
+    summary.add_column(style="dim")
+    summary.add_row("Sessions", str(aggregate.completed_trainings), "completed trainings")
+    summary.add_row("Accuracy", f"{aggregate.accuracy:.0%}", "share of correct answers")
+    summary.add_row(
+        "Time", _seconds(aggregate.average_correct_seconds), "average per correct answer"
     )
-    table = Table(title="History")
-    table.add_column("Date", no_wrap=True)
-    table.add_column("Difficulty", no_wrap=True)
-    for heading in ("Correct", "Accuracy", "Score"):
+    summary.add_row("Streak", f"{_days(current)} (best {longest})", "days in a row")
+    summary.add_row(
+        "Last session", f"{_grade_markup(rows[0].score_percent)}  {rows[0].score_percent:.0%}", ""
+    )
+    summary.add_row("Score trend", _sparkline([row.score_percent for row in reversed(rows)]), "")
+    console.print(Panel(summary, title="Results"))
+    table = Table(title="Sessions")
+    table.add_column("When", no_wrap=True)
+    table.add_column("Setup", no_wrap=True)
+    for heading in ("Correct", "Score"):
         table.add_column(heading, justify="right")
     table.add_column("Grade", justify="center")
-    table.add_column("Avg", justify="right")
+    table.add_column("Time", justify="right")
     for row in rows:
         table.add_row(
             datetime.fromtimestamp(row.started_at).astimezone().strftime("%Y-%m-%d %H:%M"),
-            row.difficulty,
+            setup_label(row.difficulty, row.strict, row.operations, row.topics),
             f"{row.correct_answers}/{row.total_examples}",
-            f"{row.accuracy:.1%}",
-            f"{row.score_percent:.1%}",
+            f"{row.score_percent:.0%}",
             _grade_markup(row.score_percent),
-            f"{row.average_response_seconds:.2f}s",
+            _seconds(row.average_correct_seconds),
         )
     console.print(table)
     breakdown = stats.breakdown()
+    trick_rows = tuple(
+        GroupStats(
+            "trick", item.strategy, item.attempts, item.correct, item.average_correct_seconds
+        )
+        for item in stats.trick_stats()
+    )
     console.print(
-        _group_table("Breakdown", (breakdown.difficulties, breakdown.operations, breakdown.topics))
+        _group_table(
+            "Skills",
+            (
+                ("Operations", breakdown.operations),
+                ("Topics", breakdown.topics),
+                ("Tricks", trick_rows),
+                ("Difficulty", breakdown.difficulties),
+            ),
+        )
     )
     weak = stats.weak_spots()
     if weak:
-        console.print(_group_table("Weak spots", (weak,)))
-    records = Table(title="Personal records")
-    for heading in (
-        "Difficulty",
-        "Mode",
-        "Operations",
-        "Sessions",
-        "Best score",
-        "Best avg correct",
-    ):
+        console.print(_group_table("Practise next", (("", weak),)))
+    records = Table(title="Personal bests")
+    for heading in ("Setup", "Sessions", "Best score", "Best time"):
         records.add_column(heading)
-    for record in stats.records():
+    records.columns[1].justify = "right"
+    records.columns[2].justify = "right"
+    records.columns[3].justify = "right"
+    for record in sorted(stats.records(), key=lambda item: item.best_score_percent, reverse=True):
         records.add_row(
-            record.difficulty,
-            "strict" if record.strict else "soft",
-            ", ".join((*record.operations, *record.topics)),
+            setup_label(record.difficulty, record.strict, record.operations, record.topics),
             str(record.sessions),
-            f"{record.best_score_percent:.1%}",
-            "—"
-            if record.best_average_correct_seconds is None
-            else f"{record.best_average_correct_seconds:.2f}s",
+            f"{record.best_score_percent:.0%}",
+            _seconds(record.best_average_correct_seconds),
         )
     console.print(records)
-    trick_rows = stats.trick_stats()
-    if trick_rows:
-        trick_table = Table(title="Tricks")
-        for heading in ("Trick", "Attempts", "Accuracy", "Avg correct"):
-            trick_table.add_column(heading)
-        for item in trick_rows:
-            trick_table.add_row(
-                item.strategy,
-                str(item.attempts),
-                f"{item.correct / item.attempts:.1%}",
-                "—"
-                if item.average_correct_seconds is None
-                else f"{item.average_correct_seconds:.2f}s",
-            )
-        console.print(trick_table)
     if funbox is not None:
         console.print(funbox)
+    console.print(
+        "[dim]Time is the average per correct answer. Score counts speed and difficulty.[/dim]"
+    )
 
 
 def _funbox_table(stats: Stats) -> Table | None:
@@ -495,13 +496,13 @@ def _funbox_table(stats: Stats) -> Table | None:
     if not groups:
         return None
     table = Table(title="Funbox (experimental)")
-    for heading in ("Mode", "Attempts", "Accuracy", "Avg correct"):
+    for heading in ("Mode", "Attempts", "Accuracy", "Time"):
         table.add_column(heading)
     for item in groups:
         table.add_row(
             item.name,
             str(item.attempts),
-            f"{item.accuracy:.1%}",
+            f"{item.accuracy:.0%}",
             _seconds(item.average_correct_seconds),
         )
     return table

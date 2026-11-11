@@ -228,8 +228,8 @@ def test_results_prints_streak_and_records(monkeypatch) -> None:
     result = runner.invoke(app, ["results"])
     assert result.exit_code == 0
     output = re.sub(r"\s+", " ", result.stdout)
-    assert "Streak: 1 day (best 1)" in output
-    assert "Personal records" in output
+    assert "Streak 1 day (best 1)" in output
+    assert "Personal bests" in output
 
 
 def test_tricks_command_lists_every_trick() -> None:
@@ -244,14 +244,59 @@ def test_tricks_command_lists_every_trick() -> None:
     assert "easy, normal" in output
 
 
+def test_results_uses_shared_metric_names_and_area_names(monkeypatch) -> None:
+    _run_correct_challenge(monkeypatch, "-o", "*")
+    output = runner.invoke(app, ["results"]).stdout
+    assert all(
+        label in output
+        for label in ("Sessions", "Skills", "Personal bests", "Time", "multiplication")
+    )
+    assert "Average answer" not in output
+
+
+def test_results_time_uses_only_correct_answers(monkeypatch) -> None:
+    cli_module = importlib.import_module("numbra.cli.app")
+    from numbra.core.expressions import parse_expression
+
+    attempts = 0
+
+    async def one_wrong_answer(text, *args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 2:
+            return "wrong"
+        return str(parse_expression(text.removesuffix(" = ")).evaluate())
+
+    async def no_cooldown(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(cli_module, "timed_prompt", one_wrong_answer)
+    monkeypatch.setattr(cli_module, "cooldown", no_cooldown)
+    challenge = runner.invoke(app, ["challenge", "-t", "1", "-n", "1", "-o", "+"])
+    assert challenge.exit_code == 0, challenge.stdout
+    import sqlite3
+
+    from numbra.config import default_database_path
+
+    with sqlite3.connect(default_database_path()) as connection:
+        connection.execute(
+            "UPDATE attempts SET elapsed = CASE is_correct WHEN 1 THEN 1.0 ELSE 9.0 END"
+        )
+
+    output = runner.invoke(app, ["results"]).stdout
+    assert "Time           1.0 s" in output
+    assert "3.7 s" not in output
+
+
 def test_results_shows_tricks_table_only_with_data(monkeypatch) -> None:
     _run_correct_challenge(monkeypatch)
     assert "Tricks" not in runner.invoke(app, ["results"]).stdout
     _run_correct_challenge(monkeypatch, "-o", "tricks")
     result = runner.invoke(app, ["results"])
     assert result.exit_code == 0
+    assert "Skills" in result.stdout
     assert "Tricks" in result.stdout
-    assert "Avg correct" in result.stdout
+    assert "Time" in result.stdout
 
 
 def test_config_help_lists_commands() -> None:
@@ -310,13 +355,13 @@ def test_results_shows_summary_history_and_breakdown(monkeypatch) -> None:
     result = runner.invoke(app, ["results"])
     assert result.exit_code == 0
     output = re.sub(r"\s+", " ", result.stdout)
-    assert "Sessions: 1" in output
-    assert re.search(r"Score trend: [▁▂▃▄▅▆▇█]+", output)
-    assert "History" in output
-    assert "Breakdown" in output
-    assert "difficulty: normal" in output
-    assert "operation: +" in output
-    assert "Avg correct" in output
+    assert "Sessions 1" in output
+    assert re.search(r"Score trend [▁▂▃▄▅▆▇█]+", output)
+    assert "Sessions" in output
+    assert "Skills" in output
+    assert "Difficulty" in output
+    assert "Operations" in output
+    assert "Time" in output
 
 
 def test_results_weak_spots_list_missed_operations(monkeypatch) -> None:
@@ -340,8 +385,8 @@ def test_results_weak_spots_list_missed_operations(monkeypatch) -> None:
 
     assert result.exit_code == 0
     output = re.sub(r"\s+", " ", result.stdout)
-    assert "Weak spots" in output
-    assert "0.0%" in output.split("Weak spots", 1)[1].split("Personal records", 1)[0]
+    assert "Practise next" in output
+    assert "0%" in output.split("Practise next", 1)[1].split("Personal bests", 1)[0]
 
 
 def test_results_yes_requires_reset() -> None:
