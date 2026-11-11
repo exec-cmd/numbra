@@ -338,9 +338,9 @@ async def edit_difficulty(pilot: Pilot[Any], screen: SettingsScreen, text: str) 
     table = screen.query_one(DataTable)
     table.move_cursor(row=table.get_row_index("challenge.difficulty"))
     await pilot.press("enter")
-    await wait_until(pilot, lambda: screen.query_one(Input).display)
-    screen.query_one(Input).value = ""
-    await pilot.press(*text)
+    await wait_until(pilot, lambda: screen.app.screen is not screen)
+    options = screen.app.screen.query_one("#value", OptionList)
+    options.highlighted = ["easy", "normal", "hard"].index(text)
     await pilot.press("enter")
 
 
@@ -352,7 +352,7 @@ def test_settings_table_lists_effective_values(tmp_path: Path) -> None:
             table = screen.query_one(DataTable)
             keys = [row.key.value for row in table.ordered_rows]
             assert "challenge.difficulty" in keys
-            assert table.get_row("challenge.difficulty")[1] == '"normal"'
+            assert table.get_row("challenge.difficulty")[1] == "normal"
 
     asyncio.run(scenario())
 
@@ -384,9 +384,9 @@ def test_settings_edit_saves_and_refreshes(tmp_path: Path) -> None:
         async with app.run_test() as pilot:
             screen = await open_settings(pilot, app)
             await edit_difficulty(pilot, screen, "hard")
-            await wait_until(pilot, lambda: not screen.query_one(Input).display)
+            await wait_until(pilot, lambda: app.screen is screen)
             assert get_value(paths, "challenge.difficulty") == "hard"
-            assert screen.query_one(DataTable).get_row("challenge.difficulty")[1] == '"hard"'
+            assert screen.query_one(DataTable).get_row("challenge.difficulty")[1] == "hard"
 
     asyncio.run(scenario())
 
@@ -399,12 +399,20 @@ def test_settings_invalid_value_is_shown_and_nothing_is_written(tmp_path: Path) 
         app = make_app(tmp_path, settings, FakeClock())
         async with app.run_test() as pilot:
             screen = await open_settings(pilot, app)
-            await edit_difficulty(pilot, screen, "bogus")
-            await wait_until(pilot, lambda: plain_text(screen.query_one("#error", Static)) != "")
-            assert "challenge.difficulty" in plain_text(screen.query_one("#error", Static))
-            assert screen.query_one(Input).display
+            table = screen.query_one(DataTable)
+            table.move_cursor(row=table.get_row_index("challenge.stages"))
+            await pilot.press("enter")
+            await wait_until(pilot, lambda: app.screen is not screen)
+            editor = app.screen
+            editor.query_one("#value", Input).value = "abc"
+            await pilot.press("enter")
+            await wait_until(
+                pilot, lambda: plain_text(editor.query_one("#modal-error", Static)) != ""
+            )
+            assert "Enter a whole number" in plain_text(editor.query_one("#modal-error", Static))
+            assert get_value(paths, "challenge.stages") == 3
             await pilot.press("escape")
-            await wait_until(pilot, lambda: not screen.query_one(Input).display)
+            await wait_until(pilot, lambda: app.screen is screen)
             assert isinstance(app.screen, SettingsScreen)
             await pilot.press("escape")
             await wait_until(pilot, lambda: isinstance(app.screen, MenuScreen))
@@ -444,9 +452,7 @@ def test_settings_reset_restores_the_default(tmp_path: Path) -> None:
             await pilot.press("d")
             await wait_until(
                 pilot,
-                lambda: (
-                    screen.query_one(DataTable).get_row("challenge.difficulty")[1] == '"normal"'
-                ),
+                lambda: screen.query_one(DataTable).get_row("challenge.difficulty")[1] == "normal",
             )
         assert get_value(paths, "challenge.difficulty") == "normal"
 
@@ -494,7 +500,7 @@ def test_train_setup_reads_the_changed_setting(tmp_path: Path) -> None:
         async with app.run_test() as pilot:
             screen = await open_settings(pilot, app)
             await edit_difficulty(pilot, screen, "hard")
-            await wait_until(pilot, lambda: not screen.query_one(Input).display)
+            await wait_until(pilot, lambda: app.screen is screen)
             await pilot.press("escape")
             await wait_until(pilot, lambda: isinstance(app.screen, MenuScreen))
             app.screen.query_one(OptionList).highlighted = 0
