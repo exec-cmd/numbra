@@ -11,6 +11,8 @@ from textual.widgets import DataTable, Footer, Header, Static
 
 from ..core.generator import trick_levels
 from ..core.tricks import TRICKS
+from ..i18n import t
+from .style import translate_bindings
 
 
 class TricksScreen(Screen[None]):
@@ -21,6 +23,11 @@ class TricksScreen(Screen[None]):
     TricksScreen #rule { height: auto; padding: 1 2; border-top: solid $foreground 20%; }
     """
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.sub_title = t(self.SUB_TITLE)
+        translate_bindings(self)
+
     def compose(self) -> ComposeResult:
         yield Header()
         yield DataTable(cursor_type="row", zebra_stripes=True, id="tricks")
@@ -29,11 +36,11 @@ class TricksScreen(Screen[None]):
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
-        table.add_columns("Trick", "Problem", "Levels")
+        table.add_columns(t("Trick"), t("Problem"), t("Levels"))
         levels = trick_levels()
         for trick in TRICKS:
             table.add_row(
-                trick.id,
+                t(trick.id, "trick"),
                 trick.example.split(" = ", 1)[0],
                 " ".join(level.value[0].upper() for level in levels.get(trick.id, ())),
             )
@@ -44,14 +51,14 @@ class TricksScreen(Screen[None]):
         trick = TRICKS[event.cursor_row]
         self.query_one("#rule", Static).update(
             Text.assemble(
-                (trick.id, "bold"),
+                (t(trick.id, "trick"), "bold"),
                 "\n",
-                trick.rule,
+                t(trick.rule),
                 "\n",
                 (trick.example, "dim"),
                 "\n",
                 (
-                    f"Levels: {', '.join(level.value for level in trick_levels().get(trick.id, ()))}",
+                    f"{t('Levels')}: {', '.join(level.value for level in trick_levels().get(trick.id, ()))}",
                     "dim",
                 ),
             )

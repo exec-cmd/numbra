@@ -36,12 +36,19 @@ from ..config import (
 from ..core.funbox import FunboxMode
 from ..core.models import Difficulty, Operation
 from ..core.report import OPERATION_SYMBOLS, area_name
+from ..i18n import t
+from .style import translate_bindings
 
 if TYPE_CHECKING:
     from .app import NumbraApp
 
 
 _LABELS: dict[str, tuple[str, str, str]] = {
+    "ui.language": (
+        "Interface",
+        "Language",
+        "auto follows the system locale; applies after restart",
+    ),
     "challenge.duration_minutes": ("Training", "Length, minutes", "How long one training lasts."),
     "challenge.difficulty": (
         "Training",
@@ -134,10 +141,15 @@ class SettingsScreen(Screen[None]):
     """
     SUB_TITLE = "Settings"
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.sub_title = t(self.SUB_TITLE)
+        translate_bindings(self)
+
     def compose(self) -> ComposeResult:
         path = f"Config file: {self._paths().main}".replace(str(Path.home()), "~", 1)
         yield Header()
-        yield Static(path, id="path")
+        yield Static(t("Config file: {path}").format(path=path), id="path")
         yield DataTable(cursor_type="row", zebra_stripes=True, id="settings")
         yield Static(id="help")
         yield Static(id="error")
@@ -145,7 +157,7 @@ class SettingsScreen(Screen[None]):
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
-        table.add_columns("Setting", "Value")
+        table.add_columns(t("Setting"), t("Value"))
         self._refresh()
         table.focus()
 
@@ -153,7 +165,7 @@ class SettingsScreen(Screen[None]):
     def _highlighted(self, event: DataTable.RowHighlighted) -> None:
         key = str(event.row_key.value)
         self.query_one("#help", Static).update(
-            "" if key.startswith("group:") else _metadata(key)[2]
+            "" if key.startswith("group:") else t(_metadata(key)[2])
         )
 
     @on(DataTable.RowSelected, "#settings")
@@ -176,6 +188,8 @@ class SettingsScreen(Screen[None]):
     def _after_edit(self, key: str | None, saved: bool | None) -> None:
         if saved and key is not None:
             self._refresh(select=key)
+            if key == "ui.language":
+                self.notify(t("Language changes after restart"))
         self.query_one(DataTable).focus()
 
     def action_reset(self) -> None:
@@ -224,21 +238,22 @@ class SettingsScreen(Screen[None]):
             "Time limits",
             *(f"Difficulty: {level}" for level in ("easy", "normal", "hard")),
             "Other",
+            "Interface",
         ]
         for group in order:
             rows = grouped.get(group, [])
             if not rows:
                 continue
-            table.add_row(Text(group, style="bold"), Text(""), key=f"group:{group}")
+            table.add_row(Text(t(group), style="bold"), Text(""), key=f"group:{group}")
             for key, value in rows:
                 _, label, _ = _metadata(key)
-                table.add_row(Text(f"  {label}"), _display_value(value), key=key)
+                table.add_row(Text(f"  {t(label)}"), _display_value(key, value), key=key)
         if select is not None and select in {row.key.value for row in table.ordered_rows}:
             table.move_cursor(row=table.get_row_index(select))
         elif table.row_count > 1:
             table.move_cursor(row=1)
         key = str(table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value)
-        self.query_one("#help", Static).update(_metadata(key)[2])
+        self.query_one("#help", Static).update(t(_metadata(key)[2]))
 
     def _show_error(self, message: str) -> None:
         self.query_one("#error", Static).update(Text(message, style="bold red"))
@@ -269,34 +284,47 @@ class SettingEditor(ModalScreen[bool]):
         self.kind = (
             "difficulty"
             if key == "challenge.difficulty"
+            else "language"
+            if key == "ui.language"
             else "list"
             if key in _CANONICAL
             else "text"
         )
+        translate_bindings(self)
 
     def compose(self) -> ComposeResult:
         box = Vertical(
-            Static(Text(self.label, style="bold"), id="modal-title"),
-            Static(self.help_text, id="modal-help"),
+            Static(Text(t(self.label), style="bold"), id="modal-title"),
+            Static(t(self.help_text), id="modal-help"),
             self._control(),
             Static(id="modal-error"),
-            Button("Save", id="save"),
+            Button(t("Save"), id="save"),
         )
-        box.border_subtitle = "Enter saves, Esc cancels"
+        box.border_subtitle = t("Enter saves, Esc cancels")
         yield box
 
     def on_mount(self) -> None:
         if self.kind == "text":
             self.query_one(Input).focus()
         else:
-            self.query_one(OptionList if self.kind == "difficulty" else SelectionList).focus()
+            self.query_one(
+                OptionList if self.kind in ("difficulty", "language") else SelectionList
+            ).focus()
 
     def _control(self) -> Input | OptionList | SelectionList:
         if self.kind == "difficulty":
-            control = OptionList(*(difficulty.value for difficulty in Difficulty), id="value")
+            control = OptionList(
+                *(t(difficulty.value, "difficulty") for difficulty in Difficulty), id="value"
+            )
             control.highlighted = [difficulty.value for difficulty in Difficulty].index(
                 str(self.current)
             )
+            return control
+        if self.kind == "language":
+            choices = ("auto", "en", "ru")
+            labels = ("auto (system)", "English", "Русский")
+            control = OptionList(*(t(label) for label in labels), id="value")
+            control.highlighted = choices.index(str(self.current))
             return control
         if self.kind == "list":
             selected = set(self.current) if isinstance(self.current, list) else set()
@@ -304,14 +332,16 @@ class SettingEditor(ModalScreen[bool]):
                 return SelectionList(
                     *(
                         Selection(
-                            f"{OPERATION_SYMBOLS[item]} {area_name(item)}", item, item in selected
+                            f"{OPERATION_SYMBOLS[item]} {t(area_name(item))}",
+                            item,
+                            item in selected,
                         )
                         for item in _CANONICAL[self.key]
                     ),
                     id="value",
                 )
             return SelectionList(
-                *(Selection(item, item, item in selected) for item in _CANONICAL[self.key]),
+                *(Selection(t(item), item, item in selected) for item in _CANONICAL[self.key]),
                 id="value",
             )
         initial = str(self.current) if self.current is not None else ""
@@ -320,7 +350,9 @@ class SettingEditor(ModalScreen[bool]):
     @on(OptionList.OptionSelected, "#value")
     def _difficulty_selected(self, event: OptionList.OptionSelected) -> None:
         if self.kind == "difficulty":
-            self._save(format_value(str(event.option.prompt)))
+            self._save(format_value(tuple(Difficulty)[event.option_index].value))
+        elif self.kind == "language":
+            self._save(format_value(("auto", "en", "ru")[event.option_index]))
         elif self.kind == "list":
             self._save_list()
 
@@ -329,8 +361,11 @@ class SettingEditor(ModalScreen[bool]):
         if self.kind == "difficulty":
             options = self.query_one(OptionList)
             if options.highlighted is not None:
-                value = options.get_option_at_index(options.highlighted).prompt
-                self._save(format_value(str(value)))
+                self._save(format_value(tuple(Difficulty)[options.highlighted].value))
+        elif self.kind == "language":
+            options = self.query_one(OptionList)
+            if options.highlighted is not None:
+                self._save(format_value(("auto", "en", "ru")[options.highlighted]))
         elif self.kind == "list":
             self._save_list()
         else:
@@ -392,9 +427,16 @@ def _metadata(key: str) -> tuple[str, str, str]:
     return "Other", key, ""
 
 
-def _display_value(value: object) -> str:
+def _display_value(key: str, value: object) -> str:
     if isinstance(value, bool):
-        return "on" if value else "off"
+        return t("on" if value else "off")
+    if key == "challenge.difficulty":
+        return t(str(value), "difficulty")
+    if key == "ui.language":
+        return t({"auto": "auto (system)", "en": "English", "ru": "Русский"}[str(value)])
     if isinstance(value, list):
-        return " ".join(OPERATION_SYMBOLS.get(str(item), str(item)) for item in value) or "none"
+        return " ".join(
+            OPERATION_SYMBOLS[str(item)] if str(item) in OPERATION_SYMBOLS else t(str(item))
+            for item in value
+        ) or t("none")
     return str(value)

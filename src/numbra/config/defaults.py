@@ -49,6 +49,9 @@ max_value = 999
 min_terms = 3
 max_terms = 4
 max_result = 10000
+
+[ui]
+language = "auto"
 """
 
 _DEFAULT_TEMPLATES = '["{left} {operation} {right}"]\n'

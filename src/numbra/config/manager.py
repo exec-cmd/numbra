@@ -7,6 +7,7 @@ from typing import Any
 
 from ..core.funbox import FunboxMode
 from ..core.models import Difficulty, Operation, StageKind, Topic, parse_operation_selection
+from ..i18n import LANGUAGES
 from .defaults import _DEFAULT_DESIGN, _DEFAULT_TEMPLATES, _DEFAULT_TOML
 from .models import ChallengeConfig, DifficultyConfig, OperationTimingConfig, Settings
 from .paths import ConfigPaths, default_config_paths
@@ -105,6 +106,7 @@ def _parse_settings(
         "difficulties",
         "features",
         "funbox",
+        "ui",
     }
     if unknown_root:
         raise ConfigError(f"{paths.main.name}: unknown field {sorted(unknown_root)[0]}")
@@ -152,6 +154,16 @@ def _parse_settings(
             warnings.append(f"{paths.main.name}: difficulties.{legacy} is deprecated and ignored")
     features = _parse_features(main.get("features", {}), paths)
     funbox_modes = _parse_funbox(main.get("funbox", {}), paths)
+    ui = main.get("ui", {})
+    if not isinstance(ui, dict):
+        raise ConfigError(f"{paths.main.name}: ui must be a table")
+    if set(ui) - {"language"}:
+        raise ConfigError(
+            f"{paths.main.name}: unknown field ui.{sorted(set(ui) - {'language'})[0]}"
+        )
+    language = ui.get("language", "auto")
+    if language not in LANGUAGES:
+        raise ConfigError(f"{paths.main.name}: ui.language must be one of auto, en, ru")
     timing = _parse_timing(main.get("timing", {}), paths)
     if not isinstance(templates, list) or not all(isinstance(item, str) for item in templates):
         raise ConfigError(f"{paths.templates.name}: expected an array of strings")
@@ -182,6 +194,7 @@ def _parse_settings(
         tuple(templates),
         style_values,
         tuple(warnings),
+        language=language,
     )
 
 

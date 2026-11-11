@@ -21,6 +21,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, OptionList, Static
 
 from ..config import (
+    ConfigError,
     ConfigManager,
     ConfigPaths,
     Settings,
@@ -29,10 +30,11 @@ from ..config import (
 )
 from ..core.report import area_name
 from ..core.stats import Stats
+from ..i18n import current_language, resolve_language, set_language, t
 from .funbox import FunboxSetupScreen
 from .results import ResultsScreen
 from .settings import SettingsScreen
-from .style import days, grade_text, percent
+from .style import days, grade_text, percent, translate_bindings
 from .train import TrainSetupScreen
 from .tricks import TricksScreen
 
@@ -103,14 +105,16 @@ class MenuScreen(Screen[None]):
 
     def __init__(self) -> None:
         super().__init__()
+        self.sub_title = t(self.SUB_TITLE)
         self._stats_block: Table | Text | None = None
+        translate_bindings(self)
 
     def compose(self) -> ComposeResult:
         yield Horizontal(
             Vertical(
                 Static("numbra", id="logo"),
                 OptionList(
-                    *(Text.assemble((key, "bold"), "  ", label) for _, label, key, _, _ in MENU),
+                    *(Text.assemble((key, "bold"), "  ", t(label)) for _, label, key, _, _ in MENU),
                     id="menu",
                 ),
                 id="menu-side",
@@ -133,7 +137,7 @@ class MenuScreen(Screen[None]):
         stats = Stats(app.database_path)
         history = stats.history(1)
         if not history:
-            self._stats_block = Text("No trainings yet. Press t to start one.", style="dim")
+            self._stats_block = Text(t("No trainings yet. Press t to start one."), style="dim")
             return
 
         today = app.today()
@@ -141,22 +145,34 @@ class MenuScreen(Screen[None]):
         last = history[0]
         days_ago = (today - date.fromtimestamp(last.started_at)).days
         when = (
-            "today" if days_ago == 0 else "yesterday" if days_ago == 1 else f"{days_ago} days ago"
+            t("today")
+            if days_ago == 0
+            else t("yesterday")
+            if days_ago == 1
+            else (
+                f"{days(days_ago)} {t('ago')}"
+                if current_language() == "en"
+                else f"{days(days_ago)} назад"
+            )
         )
         last_value = Text.assemble(
             grade_text(last.score_percent), f" {percent(last.score_percent)}, {when}"
         )
         table = Table.grid(padding=(0, 3))
-        table.add_row("Streak", f"{days(current)} (best {longest})")
-        table.add_row("Last", last_value)
+        table.add_row(t("Streak"), f"{days(current)} ({t('Best').lower()} {longest})")
+        table.add_row(t("Last"), last_value)
         weak = stats.weak_spots(limit=1)
         if weak:
-            table.add_row("Practise", area_name(weak[0].name))
+            table.add_row(t("Practise next"), t(area_name(weak[0].name)))
         self._stats_block = table
 
     def _update_about(self, index: int) -> None:
         _, label, _, description, _ = MENU[index]
-        content: list[RenderableType] = [Text(label, style="bold"), Text(description), Text("")]
+        content: list[RenderableType] = [
+            Text(t(label), style="bold"),
+            Text(t(description)),
+            Text(""),
+        ]
         if self._stats_block is not None:
             content.append(self._stats_block)
         self.query_one("#about", Static).update(Group(*content))
@@ -212,15 +228,21 @@ class NumbraApp(App[None]):
         sleeper: Callable[[float], Awaitable[object]] = asyncio.sleep,
     ) -> None:
         super().__init__()
-        self.theme = terminal_theme()
         self.config_paths = config_paths or default_config_paths()
         self._settings_loader = settings_loader or (
             lambda: ConfigManager(self.config_paths).load_or_create()
         )
+        try:
+            language = self._settings_loader().language
+        except ConfigError:
+            language = "auto"
+        set_language(resolve_language(language, os.environ))
+        self.theme = terminal_theme()
         self.database_path = database_path or default_database_path()
         self.today = today
         self.clock = clock
         self.sleeper = sleeper
+        translate_bindings(self)
 
     def load_settings(self) -> Settings:
         return self._settings_loader()

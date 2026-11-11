@@ -16,9 +16,19 @@ from textual.screen import ModalScreen, Screen
 from textual.widgets import DataTable, Footer, Header, Static, TabbedContent, TabPane
 
 from ..core.challenge import grade_for_score
-from ..core.report import METRIC_HELP, area_name, setup_label
+from ..core.report import METRIC_HELP, area_name
 from ..core.stats import AttemptRecord, GroupStats, Stats, TrainingRecord
-from .style import GRADE_STYLE, days, display_expression, grade_text, percent, seconds
+from ..i18n import t, tn
+from .style import (
+    GRADE_STYLE,
+    days,
+    display_expression,
+    grade_text,
+    percent,
+    seconds,
+    setup_text,
+    translate_bindings,
+)
 
 if TYPE_CHECKING:
     from .app import NumbraApp
@@ -33,9 +43,9 @@ def _when(record: TrainingRecord, today: date) -> str:
     moment = datetime.fromtimestamp(record.started_at).astimezone()
     days_ago = (today - moment.date()).days
     if days_ago == 0:
-        return f"Today {moment:%H:%M}"
+        return f"{t('Today')} {moment:%H:%M}"
     if days_ago == 1:
-        return f"Yesterday {moment:%H:%M}"
+        return f"{t('Yesterday')} {moment:%H:%M}"
     if moment.year == today.year:
         return f"{moment:%b} {moment.day} {moment:%H:%M}"
     return f"{moment:%Y-%m-%d %H:%M}"
@@ -43,8 +53,8 @@ def _when(record: TrainingRecord, today: date) -> str:
 
 def _setup(record: TrainingRecord, *, funbox: bool = False) -> str:
     if funbox:
-        return f"funbox: {', '.join(record.operations or record.topics)}"
-    return setup_label(record.difficulty, record.strict, record.operations, record.topics)
+        return f"{t('funbox')}: {', '.join(t(mode, 'funbox') for mode in (record.operations or record.topics))}"
+    return setup_text(record.difficulty, record.strict, record.operations, record.topics)
 
 
 def _right(value: object) -> Text:
@@ -60,10 +70,10 @@ def _bar(accuracy: float) -> Text:
     )
 
 
-def _group_row(item: GroupStats) -> tuple[Text, ...]:
+def _group_row(item: GroupStats, context: str = "") -> tuple[Text, ...]:
     accuracy = item.correct / item.attempts if item.attempts else 0.0
     return (
-        Text(f"  {area_name(item.name)}"),
+        Text(f"  {t(area_name(item.name), context)}"),
         _bar(accuracy),
         _right(item.attempts),
         _right(seconds(item.average_correct_seconds)),
@@ -75,7 +85,17 @@ def _section(title: str, items: Sequence[GroupStats]) -> list[tuple[Text, ...]]:
         return []
     return [
         (Text(title, style="bold"), Text(""), Text(""), Text("")),
-        *(_group_row(item) for item in items),
+        *(
+            _group_row(
+                item,
+                "difficulty"
+                if title == t("Difficulty")
+                else "trick"
+                if title == t("Tricks")
+                else "",
+            )
+            for item in items
+        ),
     ]
 
 
@@ -103,18 +123,22 @@ class ResultsScreen(Screen[None]):
 
     def __init__(self) -> None:
         super().__init__()
+        self.sub_title = t(self.SUB_TITLE)
         self._history: list[TrainingRecord] = []
         self._sessions: list[TrainingRecord] = []
         self._funbox_ids: set[int] = set()
+        translate_bindings(self)
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(
-            "No finished trainings yet. Choose Train in the menu, finish a run, and your results appear here.",
+            t(
+                "No finished trainings yet. Choose Train in the menu, finish a run, and your results appear here."
+            ),
             id="empty",
         )
         with TabbedContent(id="tabs"):
-            with TabPane("Overview", id="overview-tab"):
+            with TabPane(t("Overview"), id="overview-tab"):
                 with VerticalScroll(id="overview"):
                     with Horizontal(id="tiles"):
                         for name in ("sessions", "accuracy", "time", "streak"):
@@ -122,30 +146,34 @@ class ResultsScreen(Screen[None]):
                     yield Static(id="trend-title")
                     yield Static(id="trend")
                     yield Static(
-                        "Complete two sessions to see the trend.", id="trend-hint", classes="note"
+                        t("Complete two sessions to see the trend."),
+                        id="trend-hint",
+                        classes="note",
                     )
                     with Horizontal(id="details"):
                         yield Static(id="last")
                         yield Static(id="practice")
-                    yield Static("Personal bests", id="bests-title")
+                    yield Static(t("Personal bests"), id="bests-title")
                     yield DataTable(id="bests", cursor_type="none", show_cursor=False)
-            with TabPane("Sessions", id="sessions-tab"):
+            with TabPane(t("Sessions"), id="sessions-tab"):
                 yield DataTable(id="sessions", cursor_type="row", zebra_stripes=True)
-            with TabPane("Skills", id="skills-tab"):
+            with TabPane(t("Skills"), id="skills-tab"):
                 yield DataTable(id="skills", cursor_type="none")
                 yield Static(
-                    "Accuracy bar: green 80%+, yellow 60%+, red below. Time is per correct answer.",
+                    t(
+                        "Accuracy bar: green 80%+, yellow 60%+, red below. Time is per correct answer."
+                    ),
                     id="skills-note",
                     classes="note",
                 )
         yield Footer()
 
     def on_mount(self) -> None:
-        self.query_one("#sessions", DataTable).add_columns(*_SESSION_HEADINGS)
+        self.query_one("#sessions", DataTable).add_columns(*(t(item) for item in _SESSION_HEADINGS))
         self.query_one("#bests", DataTable).add_columns(
-            "Setup", "Sessions", "Best score", "Best time"
+            t("Setup"), t("Sessions"), t("Best score"), t("Best time")
         )
-        self.query_one("#skills", DataTable).add_columns(*_GROUP_HEADINGS)
+        self.query_one("#skills", DataTable).add_columns(*(t(item) for item in _GROUP_HEADINGS))
         self.action_reload()
 
     def action_reload(self) -> None:
@@ -169,11 +197,11 @@ class ResultsScreen(Screen[None]):
             for item in stats.trick_stats()
         ]
         skills = [
-            *_section("Operations", breakdown.operations),
-            *_section("Topics", breakdown.topics),
-            *_section("Tricks", tricks),
-            *_section("Difficulty", breakdown.difficulties),
-            *_section("Funbox (experimental)", stats.funbox_stats()),
+            *_section(t("Operations"), breakdown.operations),
+            *_section(t("Topics"), breakdown.topics),
+            *_section(t("Tricks"), tricks),
+            *_section(t("Difficulty"), breakdown.difficulties),
+            *_section(t("Funbox (experimental)"), stats.funbox_stats()),
         ]
         self._fill("#skills", skills)
         records = sorted(stats.records(), key=lambda item: item.best_score_percent, reverse=True)[
@@ -186,7 +214,7 @@ class ResultsScreen(Screen[None]):
             "#bests",
             [
                 (
-                    setup_label(record.difficulty, record.strict, record.operations, record.topics),
+                    setup_text(record.difficulty, record.strict, record.operations, record.topics),
                     _right(record.sessions),
                     _right(percent(record.best_score_percent)),
                     _right(seconds(record.best_average_correct_seconds)),
@@ -232,10 +260,18 @@ class ResultsScreen(Screen[None]):
         aggregate = stats.aggregate()
         current, longest = stats.streak(self._numbra().today())
         tiles = {
-            "sessions": (str(aggregate.completed_trainings), "sessions", "completed"),
-            "accuracy": (percent(aggregate.accuracy), "accuracy", "share correct"),
-            "time": (seconds(aggregate.average_correct_seconds), "time", "per correct answer"),
-            "streak": (days(current), f"streak, best {longest}", "days in a row"),
+            "sessions": (str(aggregate.completed_trainings), t("sessions"), t("completed")),
+            "accuracy": (percent(aggregate.accuracy), t("accuracy"), t("share correct")),
+            "time": (
+                seconds(aggregate.average_correct_seconds),
+                t("time"),
+                t("per correct answer"),
+            ),
+            "streak": (
+                days(current),
+                t("streak, best {best}").format(best=longest),
+                t("days in a row"),
+            ),
         }
         for name, (value, label, hint) in tiles.items():
             self.query_one(f"#tile-{name}", Static).update(
@@ -249,12 +285,18 @@ class ResultsScreen(Screen[None]):
         shown_scores = list(reversed(scores))[-available_width:]
         title = (
             Text.assemble(
-                (f"Score, last {len(shown_scores)} sessions (oldest left)", "bold"),
-                f"   best {percent(max(scores))}, average {percent(sum(scores) / len(scores))}",
-                ("   scale 0–100%", "dim"),
+                (
+                    f"{t('Score')}, {t('last')} {tn(len(shown_scores), '{n} session', '{n} sessions').format(n=len(shown_scores))} ({t('oldest left')})",
+                    "bold",
+                ),
+                f"   {t('Best').lower()} {percent(max(scores))}, {t('average')} {percent(sum(scores) / len(scores))}",
+                (f"   {t('scale 0–100%')}", "dim"),
             )
             if trend
-            else Text(f"Score, last {len(shown_scores)} sessions (oldest left)", style="bold")
+            else Text(
+                f"{t('Score')}, {tn(len(shown_scores), '{n} session', '{n} sessions').format(n=len(shown_scores))} ({t('oldest left')})",
+                style="bold",
+            )
         )
         self.query_one("#trend-title", Static).update(title)
         bars = Text()
@@ -272,17 +314,17 @@ class ResultsScreen(Screen[None]):
             last_widget.display = True
             last_widget.update(
                 Text.assemble(
-                    ("Last session\n", "bold"),
+                    (f"{t('Last')} {t('Session').lower()}\n", "bold"),
                     grade_text(last.score_percent),
                     f" {percent(last.score_percent)}, {_when(last, self._numbra().today())}\n",
-                    f"{last.correct_answers} of {last.total_examples} correct, {_setup(last)}\n",
-                    f"{seconds(last.average_correct_seconds)} per correct answer",
+                    f"{last.correct_answers} {t('of')} {last.total_examples} {t('Correct').lower()}, {_setup(last)}\n",
+                    f"{seconds(last.average_correct_seconds)} {t('per correct answer')}",
                 )
             )
         else:
             last_widget.display = False
         weak = stats.weak_spots()
-        practice = Text.assemble(("Practise next\n", "bold"))
+        practice = Text.assemble((f"{t('Practise next')}\n", "bold"))
         if weak:
             width = max(len(area_name(item.name)) for item in weak)
             for item in weak:
@@ -291,7 +333,9 @@ class ResultsScreen(Screen[None]):
                 practice.append("\n")
         else:
             practice.append(
-                "Nothing stands out yet. Areas with at least 5 attempts and a miss show up here.",
+                t(
+                    "Nothing stands out yet. Areas with at least 5 attempts and a miss show up here."
+                ),
                 style="dim",
             )
         self.query_one("#practice", Static).update(practice)
@@ -316,13 +360,17 @@ class LegendScreen(ModalScreen[None]):
     LegendScreen #legend { width: 72; max-width: 100%; max-height: 100%; overflow-y: auto; border: round $accent; padding: 1 2; background: $surface; }
     """
 
+    def __init__(self) -> None:
+        super().__init__()
+        translate_bindings(self)
+
     def compose(self) -> ComposeResult:
         table = Table.grid(padding=(0, 2))
         for name, meaning in METRIC_HELP.items():
-            table.add_row(Text(name, style="bold"), meaning)
+            table.add_row(Text(t(name), style="bold"), t(meaning))
         box = Static(table, id="legend")
-        box.border_title = "Metrics"
-        box.border_subtitle = "Esc closes"
+        box.border_title = t("Metrics")
+        box.border_subtitle = t("Esc closes")
         yield box
 
     def action_close(self) -> None:
@@ -352,10 +400,12 @@ class SessionScreen(Screen[None]):
 
     def __init__(self, record: TrainingRecord, *, funbox: bool = False) -> None:
         super().__init__()
+        self.sub_title = t(self.SUB_TITLE)
         self._record = record
         self._funbox = funbox
         self._attempts: list[AttemptRecord] = []
         self._mistakes_only = False
+        translate_bindings(self)
 
     def compose(self) -> ComposeResult:
         record = self._record
@@ -377,7 +427,19 @@ class SessionScreen(Screen[None]):
     def on_mount(self) -> None:
         table = self.query_one("#attempts", DataTable)
         table.add_columns(
-            "#", "Stage", "Expression", "Your answer", "Answer", "Result", "Time", "Score"
+            *(
+                t(item)
+                for item in (
+                    "#",
+                    "Stage",
+                    "Expression",
+                    "Your answer",
+                    "Answer",
+                    "Result",
+                    "Time",
+                    "Score",
+                )
+            )
         )
         self._attempts = Stats(cast("NumbraApp", self.app).database_path).attempts(
             self._record.identifier
@@ -397,11 +459,13 @@ class SessionScreen(Screen[None]):
         mistakes = [item for item in self._attempts if not item.is_correct]
         n = len(mistakes)
         if not mistakes:
-            note.update("No mistakes")
+            note.update(t("No mistakes"))
         elif self._mistakes_only:
-            note.update("Showing mistakes only (m: show all)")
+            note.update(t("Showing mistakes only (m: show all)"))
         else:
-            note.update(f"✗ {n} mistake{'s' if n != 1 else ''}   (m: show mistakes only)")
+            note.update(
+                f"✗ {tn(n, '{n} mistake', '{n} mistakes').format(n=n)}   ({t('m: show mistakes only')})"
+            )
         visible = [
             (number, item)
             for number, item in enumerate(self._attempts, 1)
@@ -413,11 +477,14 @@ class SessionScreen(Screen[None]):
             ]
             values = (
                 _right(number),
-                Text(f"{item.stage_number} {item.kind}", style=style if style != "green" else ""),
+                Text(
+                    f"{item.stage_number} {t(item.kind, 'stage')}",
+                    style=style if style != "green" else "",
+                ),
                 Text(display_expression(item.expression), style=style if style != "green" else ""),
                 _right(item.user_answer or "—"),
                 _right(item.correct_answer),
-                Text(result, style=style),
+                Text(result if result in ("✓", "✗") else t(result), style=style),
                 _right(seconds(item.elapsed_seconds)),
                 _right(f"{item.score:.2f}"),
             )

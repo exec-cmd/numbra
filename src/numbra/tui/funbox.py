@@ -8,6 +8,7 @@ from textual.app import ComposeResult
 
 from ..config import Settings
 from ..core.funbox import FunboxMode
+from ..i18n import t
 from .train import FUNBOX_TITLE, Tick, TrainSetupScreen
 
 
@@ -19,7 +20,9 @@ class FunboxSetupScreen(TrainSetupScreen):
 
     def _choices(self, settings: Settings) -> ComposeResult:
         for mode in FunboxMode:
-            box = Tick(mode.value, value=mode in settings.challenge.funbox_modes, compact=True)
+            box = Tick(
+                t(mode.value, "funbox"), value=mode in settings.challenge.funbox_modes, compact=True
+            )
             self._boxes[mode.value] = box
             yield box
 

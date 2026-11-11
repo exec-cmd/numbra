@@ -1,8 +1,13 @@
 """Shared presentation helpers for the TUI screens."""
 
+from dataclasses import replace
+
 from rich.text import Text
+from textual.dom import DOMNode
 
 from ..core.challenge import grade_for_score
+from ..core.report import setup_label
+from ..i18n import t, tn
 
 GRADE_STYLE = {"S": "bold green", "A": "green", "B": "cyan", "C": "yellow", "D": "red"}
 
@@ -21,7 +26,29 @@ def seconds(value: float | None) -> str:
 
 
 def days(count: int) -> str:
-    return f"{count} day" if count == 1 else f"{count} days"
+    return tn(count, "{n} day", "{n} days").format(n=count)
+
+
+def setup_text(
+    difficulty: str, strict: bool, operations: tuple[str, ...], topics: tuple[str, ...]
+) -> str:
+    label = setup_label(
+        t(difficulty, "difficulty"), False, operations, tuple(t(topic) for topic in topics)
+    )
+    if not strict:
+        return label
+    prefix = t(difficulty, "difficulty")
+    suffix = label.removeprefix(prefix)
+    return f"{prefix}, {t('strict')}{suffix}"
+
+
+def translate_bindings(node: DOMNode) -> None:
+    # shortcut: rewrites Textual's per-instance BindingsMap; re-check on a Textual upgrade.
+    for key, items in node._bindings.key_to_bindings.items():
+        node._bindings.key_to_bindings[key] = [
+            replace(binding, description=t(binding.description)) if binding.description else binding
+            for binding in items
+        ]
 
 
 def display_expression(expression: str) -> str:

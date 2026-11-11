@@ -195,7 +195,7 @@ def test_setup_summary_checkbox_label_and_ctrl_s(tmp_path: Path) -> None:
             )
             setup.query_one("#duration", Input).value = "2"
             await pilot.pause()
-            assert plain_text(setup.query_one("#summary", Static)).startswith("2 min, 1 stages")
+            assert plain_text(setup.query_one("#summary", Static)).startswith("2 min, 1 stage")
             await pilot.press("ctrl+s")
             await wait_until(pilot, lambda: isinstance(app.screen, TrainingScreen))
 

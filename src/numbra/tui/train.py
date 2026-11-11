@@ -42,7 +42,8 @@ from ..core.models import (
 )
 from ..core.report import OPERATION_SYMBOLS, TrainingReport, area_name, build_report
 from ..core.stats import Stats, TrainingRecord
-from .style import display_expression
+from ..i18n import t, tn
+from .style import display_expression, translate_bindings
 
 if TYPE_CHECKING:
     from .app import NumbraApp
@@ -113,8 +114,12 @@ class TrainSetupScreen(Screen[None]):
 
     def __init__(self) -> None:
         super().__init__()
+        self.sub_title = t(self.SUB_TITLE)
+        if self.TITLE:
+            self.title = t(self.TITLE)
         self._settings: Settings | None = None
         self._boxes: dict[str, Checkbox] = {}
+        translate_bindings(self)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -127,39 +132,39 @@ class TrainSetupScreen(Screen[None]):
         challenge = self._settings.challenge
         with VerticalScroll():
             with Vertical(id="session", classes="section") as session:
-                session.border_title = "Session"
+                session.border_title = t("Session")
                 with Horizontal(classes="row"):
-                    yield Label("Difficulty")
+                    yield Label(t("Difficulty"))
                     yield Select(
-                        [(level.value, level) for level in Difficulty],
+                        [(t(level.value, "difficulty"), level) for level in Difficulty],
                         value=challenge.difficulty,
                         allow_blank=False,
                         compact=True,
                         id="difficulty",
                     )
-                    yield Label("Minutes", classes="after")
+                    yield Label(t("Minutes"), classes="after")
                     yield Input(str(challenge.duration_minutes), compact=True, id="duration")
-                    yield Label("Stages", classes="after")
+                    yield Label(t("Stages"), classes="after")
                     yield Input(str(challenge.stages), compact=True, id="stages")
                 with Horizontal(classes="row"):
-                    yield Label("Seed")
+                    yield Label(t("Seed"))
                     yield Input(
                         "" if challenge.seed is None else str(challenge.seed),
-                        placeholder="random",
+                        placeholder=t("random"),
                         compact=True,
                         id="seed",
                     )
                 with Horizontal(classes="row"):
                     yield Tick(
-                        "strict: an example ends at its time limit", compact=True, id="strict"
+                        t("strict: an example ends at its time limit"), compact=True, id="strict"
                     )
             with Vertical(id="practise", classes="section") as practise:
-                practise.border_title = self.CHOICES_LABEL
+                practise.border_title = t(self.CHOICES_LABEL)
                 with Grid(id="choices"):
                     yield from self._choices(self._settings)
             yield Static("", id="error")
             yield Static(id="summary")
-            yield Button("Start", variant="primary", id="start")
+            yield Button(t("Start"), variant="primary", id="start")
         yield Footer()
 
     def action_back(self) -> None:
@@ -182,11 +187,11 @@ class TrainSetupScreen(Screen[None]):
             minutes = _whole(self.query_one("#duration", Input).value, "Minutes", 1)
             stages = _whole(self.query_one("#stages", Input).value, "Stages", 1)
         except ValueError:
-            value = "Check minutes and stages"
+            value = t("Check minutes and stages")
         else:
             strict = self.query_one("#strict", Checkbox).value
             difficulty = self.query_one("#difficulty", Select).value
-            value = f"{minutes} min, {stages} stages, {'strict' if strict else 'soft'} timing, {difficulty}"
+            value = f"{t('{minutes} min').format(minutes=minutes)}, {tn(stages, '{n} stage', '{n} stages').format(n=stages)}, {t('strict' if strict else 'soft')} {t('timing')}, {t(str(difficulty), 'difficulty')}"
         self.query_one("#summary", Static).update(value)
 
     @on(Button.Pressed, "#start")
@@ -214,11 +219,11 @@ class TrainSetupScreen(Screen[None]):
         """Operation and topic checkboxes; the funbox setup yields its own."""
         for token in _TOKENS:
             label = (
-                f"{OPERATION_SYMBOLS[token]} {area_name(token)}"
+                f"{OPERATION_SYMBOLS[token]} {t(area_name(token))}"
                 if token in OPERATION_SYMBOLS
-                else f"{token} {area_name(token)}"
+                else f"{token} {t(area_name(token))}"
                 if token in {"sqrt", "trig", "log"}
-                else token
+                else t(token)
             )
             box = Tick(label, value=_enabled_by_default(token, settings), compact=True)
             self._boxes[token] = box
@@ -295,10 +300,11 @@ class TrainingScreen(Screen[None]):
         restart: Callable[[], TrainingSession] | None = None,
     ) -> None:
         super().__init__()
+        self.sub_title = t(self.SUB_TITLE)
         self.session = session
         self._restart = restart
         if session.mode == "funbox":
-            self.title = FUNBOX_TITLE
+            self.title = t(FUNBOX_TITLE)
         self._warnings = tuple(warnings)
         self._positions = tuple(
             (stage, problem)
@@ -313,6 +319,7 @@ class TrainingScreen(Screen[None]):
         self._example_started = 0.0
         self._session_started = 0.0
         self._timer: Timer | None = None
+        translate_bindings(self)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -336,7 +343,7 @@ class TrainingScreen(Screen[None]):
                 yield Static(classes="spacer")
             with Horizontal(id="answer-row"):
                 yield Static(classes="spacer")
-                yield Input(placeholder="Answer, then Enter", id="answer")
+                yield Input(placeholder=t("Answer, then Enter"), id="answer")
                 yield Static(classes="spacer")
             yield Static(id="feedback")
             yield Static(id="next")
@@ -357,12 +364,12 @@ class TrainingScreen(Screen[None]):
         plan = self.session.stages[stage_number]
         card = self.query_one("#card", Vertical)
         card.border_title = f"{self._index + 1}/{len(self._positions)}"
-        card.border_subtitle = plan.kind.value
+        card.border_subtitle = t(plan.kind.value, "stage")
         self.query_one("#stage", Static).update(
-            f"Stage {plan.number}/{len(self.session.stages)} {plan.kind.value}"
+            f"{t('Stage')} {plan.number}/{len(self.session.stages)} {t(plan.kind.value, 'stage')}"
         )
         self.query_one("#example", Static).update(
-            f"Example {self._index + 1}/{len(self._positions)}"
+            f"{t('Example')} {self._index + 1}/{len(self._positions)}"
         )
         problem = plan.problems[problem_number]
         self.query_one("#expression", Static).update(display_expression(problem.expression))
@@ -388,7 +395,7 @@ class TrainingScreen(Screen[None]):
         remaining = limit - elapsed
         self.query_one("#timer", ProgressBar).update(total=limit, progress=max(0.0, remaining))
         self.query_one("#clock", Static).update(
-            f"{remaining:.1f} s" if remaining >= 0 else f"+{-remaining:.1f} s over"
+            f"{remaining:.1f} s" if remaining >= 0 else f"+{-remaining:.1f} s {t('over')}"
         )
         self.query_one("#card", Vertical).set_class(remaining < 0.3 * limit, "-low")
 
@@ -404,11 +411,11 @@ class TrainingScreen(Screen[None]):
         attempt = self.session.submit(stage_number, problem_number, answer, elapsed, timed_out)
         expected = format_answer(self.session.stages[stage_number].problems[problem_number].answer)
         if attempt.timed_out:
-            message = Text.assemble(("Time's up", "bold yellow"), f"  answer {expected}")
+            message = Text.assemble((t("Time's up"), "bold yellow"), f"  {t('Answer')}: {expected}")
         elif attempt.is_correct:
-            message = Text.assemble(("✓ Correct", "bold green"), f"  +{attempt.score:.2f}")
+            message = Text.assemble((f"✓ {t('Correct')}", "bold green"), f"  +{attempt.score:.2f}")
         else:
-            message = Text.assemble(("✗ Incorrect", "bold red"), f"  answer {expected}")
+            message = Text.assemble((f"✗ {t('Wrong')}", "bold red"), f"  {t('Answer')}: {expected}")
         if attempt.is_correct:
             self._correct += 1
         else:
@@ -423,7 +430,9 @@ class TrainingScreen(Screen[None]):
         self._phase = "cooldown"
         cooldown = self.session.cooldown_seconds
         self.query_one("#feedback", Static).update(message)
-        self.query_one("#next", Static).update(Text(f"Next in {cooldown:g} s", style="dim"))
+        self.query_one("#next", Static).update(
+            Text(t("Next in {seconds}s").format(seconds=f"{cooldown:g}"), style="dim")
+        )
         self.run_worker(self._advance(), exclusive=True)
 
     async def _advance(self) -> None:
@@ -437,7 +446,9 @@ class TrainingScreen(Screen[None]):
             return
         if not self._armed:
             self._armed = True
-            self.query_one("#feedback", Static).update("Press Esc again to stop. Nothing is saved.")
+            self.query_one("#feedback", Static).update(
+                t("Press Esc again to stop. Nothing is saved.")
+            )
             return
         self._phase = "done"
         self.session.cancel()
@@ -496,12 +507,14 @@ class SummaryScreen(Screen[None]):
         restart: Callable[[], TrainingSession] | None = None,
     ) -> None:
         super().__init__()
+        self.sub_title = t(self.SUB_TITLE)
         self._completed = completed
         self._report = report
         self._record = record
         self._restart = restart
         if completed.mode == "funbox":
-            self.title = FUNBOX_TITLE
+            self.title = t(FUNBOX_TITLE)
+        translate_bindings(self)
 
     def compose(self) -> ComposeResult:
         yield Header()

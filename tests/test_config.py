@@ -9,7 +9,45 @@ def test_config_manager_creates_defaults(tmp_path: Path) -> None:
     manager = ConfigManager(ConfigPaths.from_root(tmp_path))
     settings = manager.load_or_create()
     assert settings.challenge.duration_minutes == 6
+    assert settings.language == "auto"
     assert all(path.exists() for path in manager.paths.all_files())
+
+
+def test_ui_language_setting_and_validation(tmp_path: Path) -> None:
+    paths = ConfigPaths.from_root(tmp_path)
+    manager = ConfigManager(paths)
+    settings = manager.load_or_create()
+    assert settings.language == "auto"
+    paths.main.write_text(
+        paths.main.read_text(encoding="utf-8").replace('language = "auto"', 'language = "ru"'),
+        encoding="utf-8",
+    )
+    assert manager.load_or_create().language == "ru"
+    paths.main.write_text(
+        paths.main.read_text(encoding="utf-8").replace('language = "ru"', 'language = "de"'),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ConfigError, match=r"numbra\.toml: ui\.language must be one of auto, en, ru"
+    ):
+        manager.load_or_create()
+    paths.main.write_text(
+        paths.main.read_text(encoding="utf-8").replace('language = "de"', "other = true"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match=r"unknown field ui\.other"):
+        manager.load_or_create()
+
+
+def test_config_without_ui_uses_auto(tmp_path: Path) -> None:
+    paths = ConfigPaths.from_root(tmp_path)
+    manager = ConfigManager(paths)
+    manager.load_or_create()
+    paths.main.write_text(
+        paths.main.read_text(encoding="utf-8").replace('\n[ui]\nlanguage = "auto"\n', "\n"),
+        encoding="utf-8",
+    )
+    assert manager.load_or_create().language == "auto"
 
 
 def test_unknown_toml_field_mentions_file_and_field(tmp_path: Path) -> None:

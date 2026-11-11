@@ -77,3 +77,4 @@ class Settings:
     templates: tuple[str, ...]
     styles: dict[str, str]
     warnings: tuple[str, ...] = ()
+    language: str = "auto"
