@@ -2,27 +2,28 @@
 
 ## Interactive mode
 
-Run `numbra` with no arguments in a terminal to open the interactive interface. The menu offers **Train**, **Results**, **Settings**, **Tricks** and **Funbox** (experimental, see [Training rules](training.md#funbox-experimental)); `q` or **Quit** exits. Train walks through a setup form (difficulty, duration, stages, operations and topics, strict mode, seed), then the timed run, then the summary. The form starts from your saved settings. Tricks lists every trick with an example and the levels it appears on; the full rule of the selected row is shown below the table. Without a terminal, for example when output is piped, `numbra` prints the help text instead. Every command in this page works the same way.
+Run `numbra` with no arguments in a terminal to open the interactive interface. The menu shows the Numbra logo and these items: `t` **Train**, `r` **Results**, `s` **Settings**, `k` **Tricks**, `f` **Funbox**, and `q` **Quit**. A side panel describes the selected item and shows your Streak, last session, and an area to practise when available. Funbox is experimental; see [Training rules](training.md#funbox-experimental). Without a terminal, for example when output is piped, `numbra` prints the help text instead.
+
+In **Train**, the setup form has **Session** and **Practise** sections. It starts with your saved settings, uses readable labels for choices, and updates a summary line as you edit. Press `Ctrl+S` to start. During the run, the status line shows the stage, example, and correct and incorrect counts. An overall progress bar tracks the run; the example card contains the timer and expression. Operators display as `×`, `÷`, and `−`. The timer changes to its warning colour below 30% of the limit and shows overtime as `+N s over`. Feedback appears after each answer.
 
 Keys during a training:
 
 - `Enter` submits the answer. After the cooldown the next example appears.
 - `Esc` pressed twice cancels the training. Nothing is saved.
-- In the summary, `Enter` or `Esc` returns to the menu. The setup forms (Train and Funbox), Settings and Tricks screens close with `Esc`.
-- `Ctrl+Q` quits from any screen. An unfinished training is not saved.
+- In the summary, `Enter` or `Esc` returns to the menu, `d` reviews the answers, and `t` starts another training with the same options. An explicit seed is reused; otherwise new examples are generated.
+- `q` quits from the menu. An unfinished training is not saved.
 
-Settings lists every key of `numbra.toml` with its effective value, and the file path at the top. `Enter` on a row opens an edit line holding the value as a TOML literal, such as `hard`, `42` or `["+", "-"]`. `Enter` saves it. A value the file would reject stays on screen with the error, and nothing is written until it is fixed or `Esc` cancels the edit. `d` or `Delete` removes the key, so the built-in default applies again. Each change is written to `numbra.toml` at once, and the next Train setup uses it.
+**Results** has three tabs:
 
-The Results screen shows the same saved data as `numbra results`, on tabs:
+- **Overview** shows tiles for sessions, Accuracy, Time, and Streak with hints; the Score trend; the last session; areas to practise next; and up to five Personal bests.
+- **Sessions** lists challenge and funbox sessions, newest first. Press `Enter` on a row to open that session.
+- **Skills** groups operations, topics, tricks, difficulty, and funbox, with an Accuracy bar, attempts, and Time per correct answer.
 
-- **Overview** shows the totals (sessions, examples, accuracy, time per answer, streak), the score trend with the best and average score (it needs two sessions), the last session, and up to three areas to practise next. An area appears there once it has at least five attempts and a miss, as in the weak spots of `numbra results`.
-- **History** lists completed sessions, newest first, with the level, correct answers, score, grade, time per answer and length. Select a row with `Enter` to see every example of that session: stage, expression, your answer, the correct answer, result, time and score. `Esc` returns to the list.
-- **Breakdown** shows accuracy, attempts and the time per correct answer by difficulty, operation, topic and trick.
-- **Records** lists the best score and best time per answer for each level and operation set, as `numbra results` does.
-- **Funbox** lists the mode totals and the completed funbox sessions; `Enter` on a session opens its examples, as in History. Funbox results are not part of the other tabs.
-- History and the trend cover the 1000 newest sessions; the totals cover all of them.
+Press `?` to open the metric legend. In session detail, examples are numbered continuously and mistakes are highlighted; press `m` to show mistakes only or all examples. `Esc` returns to Results. Press `r` to reload results and `Esc` to return to the menu.
 
-`r` reloads the data, and `Esc` returns to the menu. The screen cannot reset results; use `numbra results --reset`.
+**Settings** shows grouped rows with readable names and a help line for the selected setting. Press `Enter` to toggle on/off settings, open a difficulty list, an operations or funbox modes checklist, or a number field. Press `d` to restore the selected setting's built-in default. The file and keys of `numbra.toml` are unchanged; each edit is saved immediately.
+
+**Tricks** lists tricks in the `Trick`, `Problem`, and `Levels` columns; levels use `E`, `N`, and `H`. The panel below the table shows the selected trick's rule, a worked example, and its levels.
 
 ## Install and start
 
@@ -70,26 +71,20 @@ Every answer is an integer. Input may also be an exact fraction such as `6/3`, w
 
 ## After a challenge
 
-Numbra prints the result (correct answers, score, grade), a breakdown by stage kind, operation, and topic, and then your progress:
-
-- `Previous comparable` and `Delta` — the last session with exactly the same settings and generator version.
-- `Avg correct answer` — your mean time for correct answers, with the best and previous value in the same progress group.
-- `New personal best` or `Personal best` — your best score percentage in the group and the difference to it.
-- `Streak` — consecutive days with at least one completed challenge, and your longest streak.
-- `Recommendation` — after three sessions in the group: try the next level, keep it, or step down. On `hard` it never suggests a higher level.
+Numbra displays a summary card shared with the interactive interface. It shows your Grade, Score, Accuracy, and Time, with changes against the previous comparable session where available. Ordinary sessions also show Best against your Personal best. The card includes a stage table, weakest area when present, Streak, and recommendation when available.
 
 A progress group is difficulty, strict or soft mode, and the selected operations and topics. Duration, stage count, and generator updates do not split a group.
 
 ## Review or clear results
 
-`numbra results` prints, in order:
+`numbra results` prints a `Results` panel with sessions, Accuracy, Time, Streak, last session, and Score trend, followed by:
 
-- `Results` panel — completed sessions, examples, accuracy, and average answer time over all sessions; your streak; the grade of the last session; and a score sparkline of the sessions shown, oldest to newest, plus the timeout count.
-- `History` — the most recent sessions, newest first: correct answers, accuracy, score, grade (S, A, B, C, or D), and average answer time. Choose the number of rows with `--limit`, for example `numbra results --limit 20`.
-- `Breakdown` — attempts, accuracy, and average time of correct answers by difficulty, operation, and topic.
-- `Weak spots` — shown only when some operation, topic, or trick has at least five attempts. It lists the three groups with the lowest accuracy; ties go to the group with the slower correct answers.
-- `Personal records` — one row per progress group, and, once you have trained with `tricks`, a `Tricks` table with attempts, accuracy, and average correct time for each trick.
-- `Funbox (experimental)` — shown only after funbox sessions, with attempts, accuracy, and average correct time for each mode. Funbox results are not part of the other tables, records, the streak, or comparisons.
+- `Sessions` — the latest sessions, newest first. `--limit` sets the number of rows, for example `numbra results --limit 20`.
+- `Skills` — attempts, accuracy, and Time by operations, topics, tricks, and difficulty.
+- `Practise next` — shown when areas to practise are available.
+- `Personal bests` — one row per progress group, with its best score and Time.
+- `Funbox (experimental)` — shown when there are funbox results, with attempts, accuracy, and Time by mode.
+- A closing note explains Time and Score.
 
 To clear saved results, run `numbra results --reset` and confirm the prompt. For a script, add `--yes` to skip confirmation. Reset removes training history, records, streaks, and funbox results.
 

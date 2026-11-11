@@ -48,11 +48,20 @@ In the default soft mode you can keep typing after the limit. `--strict` ends th
 
 A correct answer is worth up to `1 + 0.2 × max(0, work units − 1)` points, so heavier problems are worth more. Within the limit you get the full value; in soft mode the value then falls linearly to zero at twice the limit. Wrong answers and strict timeouts score zero.
 
-The session score is a percentage of the maximum. Grades: S ≥ 90%, A ≥ 75%, B ≥ 60%, C ≥ 40%, otherwise D.
+The session Score is a percentage of the maximum. Grades: S ≥ 90%, A ≥ 75%, B ≥ 60%, C ≥ 40%, otherwise D.
+
+Metrics:
+
+- **Score** — points for speed and difficulty, as a percent of the maximum.
+- **Accuracy** — share of correct answers.
+- **Grade** — letter for the Score: S 90%+, A 75%+, B 60%+, C 40%+, D below.
+- **Time** — average seconds per correct answer.
+- **Streak** — days in a row with a completed training.
+- **Personal best** — best Score with the same difficulty, timing mode, operations, and topics.
 
 ## Progress
 
-A progress group is the difficulty, the mode (strict or soft), and the selected operations and topics. Within a group Numbra tracks your best score percentage and your best average time per correct answer. Duration, stage count, and generator updates do not start a new group.
+A progress group is the difficulty, the mode (strict or soft), and the selected operations and topics. Within a group Numbra tracks your best Score and your best Time. Duration, stage count, and generator updates do not start a new group.
 
 A day counts toward your streak when at least one challenge was completed on it, in local time. The streak continues through the next day, so it does not reset in the morning before you train; a fully missed day resets it to zero. The longest streak is kept.
 

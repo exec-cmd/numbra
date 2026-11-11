@@ -46,7 +46,7 @@ numbra challenge -d hard --strict
 numbra challenge -o "*,/" -t 3   # only multiplication and division, three minutes
 numbra challenge -o tricks       # mental-math tricks
 numbra tricks                    # every trick with its rule and an example
-numbra results                   # history, personal records, streak
+numbra results                   # sessions, skills, progress
 numbra config list               # every setting and its value
 numbra config set challenge.difficulty hard   # save a new default
 ```
@@ -62,7 +62,7 @@ Example 1/27 · limit 17s
 Correct · score 1.00
 ```
 
-After the last example Numbra prints your score and grade, a breakdown by stage, operation, and topic, the delta against your previous comparable session, your personal best, and your streak.
+After the last example Numbra shows your grade, Score, Accuracy, Time, stage results, streak, and recommendation when available.
 
 ## Documentation
 

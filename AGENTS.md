@@ -8,8 +8,8 @@ Read the relevant implementation and tests before changing behavior. Prefer the 
 
 ## Repository map
 
-- `src/numbra/cli/` owns Typer commands, Rich output, Prompt Toolkit input, and logging setup.
-- `src/numbra/tui/` owns the Textual interface (`numbra` with no arguments on a terminal): `app.py` has the menu and the `MENU` list, `train.py` the setup, timed run and summary screens, `results.py` the results tabs and session detail, `settings.py` the settings table and editor, `tricks.py` the tricks table, `funbox.py` the funbox setup. It is presentation only and drives the same core sessions and stats as the CLI.
+- `src/numbra/cli/` owns Typer commands, Rich output, Prompt Toolkit input, `summary.py` (the summary card shared with the TUI), and logging setup.
+- `src/numbra/tui/` owns the Textual interface (`numbra` with no arguments on a terminal): `app.py` has the menu and the `MENU` list, `train.py` the setup, timed run and summary screens, `results.py` the Overview, Sessions, and Skills tabs and session detail, `settings.py` the settings table and editor, `tricks.py` the tricks table, `funbox.py` the funbox setup, and `style.py` shared presentation helpers. It is presentation only and drives the same core sessions and stats as the CLI.
 - `src/numbra/config/` owns platform paths, default files, parsing, validation, and public config exports.
 - `src/numbra/core/` owns arithmetic models, generation (`catalog.py`, `tricks.py`, `generator.py`), stage allocation, sessions, scoring, statistics, and the post-training report (`report.py`). Keep this package independent of Typer and Rich.
 - `src/numbra/core/db/schema.py` defines the SQLite schema. `Stats._migrate()` handles existing databases.

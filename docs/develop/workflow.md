@@ -13,7 +13,7 @@ Read when a command fails to start, when you add an import in `core` or at packa
 
 ## Textual interface
 
-`numbra/tui` is imported only when `numbra` runs with no arguments on a terminal, so other commands do not load Textual. Its tests run headless: `tests/test_tui.py` drives `NumbraApp` through `App.run_test()` inside `asyncio.run`, with `Pilot.press` for keys. The app takes injected settings, database path, date, clock and cooldown sleeper, so the tests use a fake clock and a no-op sleeper, and wait only for the screen to settle; the file runs in about five seconds. Run it alone with `uv run python -m pytest tests/test_tui.py`.
+`numbra/tui` is imported only when `numbra` runs with no arguments on a terminal, so other commands do not load Textual. Its tests run headless through `App.run_test()` with `Pilot.press` for keys. Coverage is split across `tests/test_tui.py`, `tests/test_tui_run.py`, `tests/test_tui_results.py`, `tests/test_tui_menu.py`, `tests/test_tui_settings.py`, and `tests/test_tui_style.py`. The app takes injected settings, database path, date, clock and cooldown sleeper, so tests use isolated paths, a fake clock, and a no-op sleeper. Run them with `.venv/bin/python -m pytest -q tests/test_tui*.py`; the suite took 29 seconds here.
 
 ## Which tests answer which change
 
@@ -26,7 +26,7 @@ Start with the closest file, then run everything.
 - Storage and progress: `test_stats.py`, `test_stats_migrations.py`, `test_progress.py`
 - Post-training summary and recommendation: `test_report.py`
 - Commands and output: `test_cli.py`
-- Interactive interface, menu, results, training flow and summary: `test_tui.py`
+- Interactive interface: `test_tui.py`, `test_tui_menu.py`, `test_tui_run.py`, `test_tui_results.py`, `test_tui_settings.py`, `test_tui_style.py`
 
 ## Documentation
 
