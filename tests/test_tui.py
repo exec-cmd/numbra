@@ -317,7 +317,7 @@ def test_results_without_sessions_shows_the_empty_message(tmp_path: Path) -> Non
             results = await open_results(pilot, app)
             await wait_until(pilot, lambda: results.query_one("#empty").display)
             assert plain_text(results.query_one("#empty", Static)) == (
-                "No completed challenges yet. Choose Train in the menu to start one."
+                "No finished trainings yet. Choose Train in the menu, finish a run, and your results appear here."
             )
             assert not results.query_one("#tabs").display
 
@@ -363,9 +363,9 @@ def test_results_history_opens_a_session_and_escape_returns(tmp_path: Path) -> N
         app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
         async with app.run_test() as pilot:
             results = await open_results(pilot, app)
-            assert results.query_one("#history", DataTable).row_count == 1
-            results.query_one(TabbedContent).active = "history-tab"
-            await wait_until(pilot, lambda: app.focused is results.query_one("#history"))
+            assert results.query_one("#sessions", DataTable).row_count == 1
+            results.query_one(TabbedContent).active = "sessions-tab"
+            await wait_until(pilot, lambda: app.focused is results.query_one("#sessions"))
             await pilot.press("enter")
             await wait_until(pilot, lambda: isinstance(app.screen, SessionScreen))
             assert app.screen.query_one("#attempts", DataTable).row_count == total
@@ -419,8 +419,8 @@ def test_results_tabs_show_saved_statistics(tmp_path: Path) -> None:
         app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
         async with app.run_test() as pilot:
             results = await open_results(pilot, app)
-            assert results.query_one("#breakdown", DataTable).row_count > 0
-            assert results.query_one("#records", DataTable).row_count == 1
+            assert results.query_one("#skills", DataTable).row_count > 0
+            assert results.query_one("#bests", DataTable).row_count == 1
             # One session has no miss and fewer than five attempts, so no weak spot.
             assert "Nothing stands out yet" in plain_text(results.query_one("#practice", Static))
             last = plain_text(results.query_one("#last", Static))
@@ -428,9 +428,6 @@ def test_results_tabs_show_saved_statistics(tmp_path: Path) -> None:
             # The trend needs two sessions; the hint takes its place.
             assert not results.query_one("#trend", Sparkline).display
             assert results.query_one("#trend-hint").display
-            assert plain_text(results.query_one("#funbox-empty", Static)) == (
-                "No funbox sessions yet."
-            )
 
     asyncio.run(scenario())
 
@@ -464,7 +461,9 @@ def test_results_reload_shows_sessions_saved_while_open(tmp_path: Path) -> None:
             await wait_until(pilot, lambda: results.query_one("#empty").display)
             save_completed_session(tmp_path)
             await pilot.press("r")
-            await wait_until(pilot, lambda: results.query_one("#history", DataTable).row_count == 1)
+            await wait_until(
+                pilot, lambda: results.query_one("#sessions", DataTable).row_count == 1
+            )
             assert not results.query_one("#empty").display
 
     asyncio.run(scenario())
@@ -630,7 +629,7 @@ def test_cancelled_funbox_session_saves_nothing(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
-def test_results_funbox_tab_lists_saved_sessions(tmp_path: Path) -> None:
+def test_results_sessions_lists_saved_funbox_sessions(tmp_path: Path) -> None:
     async def scenario() -> None:
         total = save_funbox_session(tmp_path)
         app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
@@ -638,13 +637,11 @@ def test_results_funbox_tab_lists_saved_sessions(tmp_path: Path) -> None:
             results = await open_results(pilot, app)
             await wait_until(pilot, lambda: results.query_one("#tabs").display)
             assert not results.query_one("#empty").display
-            assert results.query_one("#funbox", DataTable).row_count == 2  # heading and mode
-            assert results.query_one("#funbox-history", DataTable).row_count == 1
-            assert not results.query_one("#funbox-empty").display
-            assert results.query_one("#history", DataTable).row_count == 0
-            results.query_one(TabbedContent).active = "funbox-tab"
+            assert results.query_one("#sessions", DataTable).row_count == 1
+            assert "funbox:" in str(results.query_one("#sessions", DataTable).get_row_at(0)[1])
+            results.query_one(TabbedContent).active = "sessions-tab"
             await pilot.pause()
-            results.query_one("#funbox-history", DataTable).focus()
+            results.query_one("#sessions", DataTable).focus()
             await pilot.press("enter")
             await wait_until(pilot, lambda: isinstance(app.screen, SessionScreen))
             assert app.screen.query_one("#attempts", DataTable).row_count == total
