@@ -15,8 +15,7 @@ class FunboxSetupScreen(TrainSetupScreen):
     """Experimental funbox run; the form, timing and summary are the training ones."""
 
     TITLE = FUNBOX_TITLE
-    CHOICES_LABEL = "Funbox modes (at least one)"
-    DEFAULT_CSS = "FunboxSetupScreen #choices { grid-size: 3; }"
+    CHOICES_LABEL = "Modes"
 
     def _choices(self, settings: Settings) -> ComposeResult:
         for mode in FunboxMode:

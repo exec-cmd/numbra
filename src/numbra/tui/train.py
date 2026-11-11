@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, cast
 
 from rich.text import Text
@@ -25,13 +25,13 @@ from textual.widgets import (
     Static,
 )
 
+from ..cli.summary import summary_card
 from ..config import ConfigError, Settings
 from ..core.challenge import (
     Challenge,
     ChallengeOptions,
     CompletedTraining,
     TrainingSession,
-    grade_for_score,
 )
 from ..core.models import (
     Difficulty,
@@ -40,9 +40,9 @@ from ..core.models import (
     format_answer,
     parse_operation_selection,
 )
-from ..core.report import RECOMMENDATION_TEXT, TrainingReport, build_report
-from ..core.stats import Stats
-from .style import days
+from ..core.report import OPERATION_SYMBOLS, TrainingReport, area_name, build_report
+from ..core.stats import Stats, TrainingRecord
+from .style import display_expression
 
 if TYPE_CHECKING:
     from .app import NumbraApp
@@ -84,7 +84,8 @@ def _whole(text: str, label: str, minimum: int | None = None) -> int:
 class TrainSetupScreen(Screen[None]):
     """Form for one training; Start replaces this screen with the run."""
 
-    BINDINGS = [Binding("escape", "back", "Back")]
+    BINDINGS = [Binding("escape", "back", "Back"), Binding("ctrl+s", "start", "Start")]
+    SUB_TITLE = "New training"
     CHOICES_LABEL = "Operations and topics"
     DEFAULT_CSS = """
     TrainSetupScreen VerticalScroll { padding: 1 2; }
@@ -96,10 +97,13 @@ class TrainSetupScreen(Screen[None]):
     TrainSetupScreen #seed { width: 16; }
     TrainSetupScreen #strict { margin: 1 0 0 3; }
     TrainSetupScreen Checkbox, TrainSetupScreen Checkbox:focus { border: none; }
-    TrainSetupScreen #choices-label { margin-top: 1; text-style: bold; }
-    TrainSetupScreen #choices {
-        grid-size: 5; grid-rows: 1; height: auto; margin-bottom: 1;
+    TrainSetupScreen .section {
+        border: round $panel-lighten-2; height: auto; padding: 0 1; margin-bottom: 1;
     }
+    TrainSetupScreen #choices {
+        grid-size: 3; height: auto; margin-bottom: 1;
+    }
+    TrainSetupScreen #summary { color: $text-muted; height: 1; }
     TrainSetupScreen #error { color: $error; height: auto; }
     """
 
@@ -118,51 +122,96 @@ class TrainSetupScreen(Screen[None]):
             return
         challenge = self._settings.challenge
         with VerticalScroll():
-            with Horizontal(classes="row"):
-                yield Label("Difficulty")
-                yield Select(
-                    [(level.value, level) for level in Difficulty],
-                    value=challenge.difficulty,
-                    allow_blank=False,
-                    id="difficulty",
-                )
-                yield Label("Minutes", classes="after")
-                yield Input(str(challenge.duration_minutes), id="duration")
-                yield Label("Stages", classes="after")
-                yield Input(str(challenge.stages), id="stages")
-            with Horizontal(classes="row"):
-                yield Label("Seed")
-                yield Input(
-                    "" if challenge.seed is None else str(challenge.seed),
-                    placeholder="random",
-                    id="seed",
-                )
-                yield Tick("strict: an example ends at its limit", compact=True, id="strict")
-            yield Label(self.CHOICES_LABEL, id="choices-label")
-            with Grid(id="choices"):
-                yield from self._choices(self._settings)
+            with Vertical(id="session", classes="section") as session:
+                session.border_title = "Session"
+                with Horizontal(classes="row"):
+                    yield Label("Difficulty")
+                    yield Select(
+                        [(level.value, level) for level in Difficulty],
+                        value=challenge.difficulty,
+                        allow_blank=False,
+                        id="difficulty",
+                    )
+                    yield Label("Minutes", classes="after")
+                    yield Input(str(challenge.duration_minutes), id="duration")
+                    yield Label("Stages", classes="after")
+                    yield Input(str(challenge.stages), id="stages")
+                with Horizontal(classes="row"):
+                    yield Label("Seed")
+                    yield Input(
+                        "" if challenge.seed is None else str(challenge.seed),
+                        placeholder="random",
+                        id="seed",
+                    )
+                    yield Tick("strict: an example ends at its limit", compact=True, id="strict")
+            with Vertical(id="practise", classes="section") as practise:
+                practise.border_title = self.CHOICES_LABEL
+                with Grid(id="choices"):
+                    yield from self._choices(self._settings)
             yield Static("", id="error")
+            yield Static(id="summary")
             yield Button("Start", variant="primary", id="start")
         yield Footer()
 
     def action_back(self) -> None:
         self.app.pop_screen()
 
+    def on_mount(self) -> None:
+        self._update_summary()
+
+    @on(Input.Changed)
+    @on(Select.Changed)
+    @on(Checkbox.Changed)
+    def _form_changed(self, event: object) -> None:
+        del event
+        self._update_summary()
+
+    def _update_summary(self) -> None:
+        if not self.query("#summary"):
+            return
+        try:
+            minutes = _whole(self.query_one("#duration", Input).value, "Minutes", 1)
+            stages = _whole(self.query_one("#stages", Input).value, "Stages", 1)
+        except ValueError:
+            value = "Check minutes and stages"
+        else:
+            strict = self.query_one("#strict", Checkbox).value
+            difficulty = self.query_one("#difficulty", Select).value
+            value = f"{minutes} min, {stages} stages, {'strict' if strict else 'soft'} timing, {difficulty}"
+        self.query_one("#summary", Static).update(value)
+
     @on(Button.Pressed, "#start")
     def start(self) -> None:
         try:
-            session = self._create_session()
+            options = self._options()
+            assert self._settings is not None
+            settings = self._settings
+            clock = self._numbra().clock
+            session = Challenge(settings, clock=clock).create_session(options)
         except (ConfigError, ValueError) as exc:  # GenerationError is a ValueError
             self.query_one("#error", Static).update(Text(str(exc), style="bold red"))
             return
-        assert self._settings is not None
-        warnings = (*self._settings.warnings, *session.warnings)
-        self.app.switch_screen(TrainingScreen(session, warnings))
+        warnings = (*settings.warnings, *session.warnings)
+
+        def restart() -> TrainingSession:
+            return Challenge(settings, clock=clock).create_session(options)
+
+        self.app.switch_screen(TrainingScreen(session, warnings, restart=restart))
+
+    def action_start(self) -> None:
+        self.start()
 
     def _choices(self, settings: Settings) -> ComposeResult:
         """Operation and topic checkboxes; the funbox setup yields its own."""
         for token in _TOKENS:
-            box = Tick(token, value=_enabled_by_default(token, settings), compact=True)
+            label = (
+                f"{OPERATION_SYMBOLS[token]} {area_name(token)}"
+                if token in OPERATION_SYMBOLS
+                else f"{token} {area_name(token)}"
+                if token in {"sqrt", "trig", "log"}
+                else token
+            )
+            box = Tick(label, value=_enabled_by_default(token, settings), compact=True)
             self._boxes[token] = box
             yield box
 
@@ -176,11 +225,11 @@ class TrainSetupScreen(Screen[None]):
             "identities": self._boxes["identities"].value,
         }
 
-    def _create_session(self) -> TrainingSession:
+    def _options(self) -> ChallengeOptions:
         if self._settings is None:
             raise ConfigError("settings are not loaded")
         seed_text = self.query_one("#seed", Input).value.strip()
-        options = ChallengeOptions(
+        return ChallengeOptions(
             duration_minutes=_whole(self.query_one("#duration", Input).value, "Duration", 1),
             stages=_whole(self.query_one("#stages", Input).value, "Stages", 1),
             difficulty=cast(Difficulty, self.query_one("#difficulty", Select).value),
@@ -188,7 +237,6 @@ class TrainSetupScreen(Screen[None]):
             strict=self.query_one("#strict", Checkbox).value,
             **self._chosen(),
         )
-        return Challenge(self._settings, clock=self._numbra().clock).create_session(options)
 
     def _numbra(self) -> NumbraApp:
         return cast("NumbraApp", self.app)
@@ -198,21 +246,48 @@ class TrainingScreen(Screen[None]):
     """One timed run: examples in order, cooldown between them, saved only on completion."""
 
     BINDINGS = [Binding("escape", "cancel", "Cancel (press twice)")]
+    SUB_TITLE = "Training"
     DEFAULT_CSS = """
-    TrainingScreen #training { padding: 0 2; }
-    TrainingScreen #stage { color: $text-muted; margin-top: 1; }
-    TrainingScreen #expression {
-        text-style: bold; content-align: center middle; height: 5;
-        border: heavy $accent; margin: 1 0;
+    TrainingScreen #training { align: center top; }
+    TrainingScreen #status { height: 1; margin: 1 2 0 2; }
+    TrainingScreen #status #stage { width: 1fr; text-align: left; }
+    TrainingScreen #status #example { width: 1fr; text-align: center; }
+    TrainingScreen #status #counts { width: 1fr; text-align: right; }
+    TrainingScreen #overall { margin: 0 2; width: 1fr; }
+    TrainingScreen #overall Bar { width: 1fr; }
+    TrainingScreen #card-row, TrainingScreen #answer-row { width: 1fr; height: auto; }
+    TrainingScreen .spacer { width: 1fr; height: 1; }
+    TrainingScreen #card {
+        width: 64; max-width: 64; height: auto; border: round $accent;
+        padding: 1 2; margin-top: 1;
     }
-    TrainingScreen #answer { width: 40; }
-    TrainingScreen #timer { margin: 1 0 0 0; }
-    TrainingScreen #feedback { height: auto; margin-top: 1; }
+    TrainingScreen #expression {
+        width: 1fr; height: 3; content-align: center middle; text-style: bold;
+    }
+    TrainingScreen #timer-row { height: 1; margin-top: 1; }
+    TrainingScreen #timer { width: 1fr; }
+    TrainingScreen #timer Bar { width: 1fr; }
+    TrainingScreen #clock { width: 12; text-align: right; }
+    TrainingScreen #card.-low #timer Bar > .bar--bar { color: $warning; }
+    TrainingScreen #card.-low #clock { color: $warning; }
+    TrainingScreen #answer { width: 24; content-align: center middle; }
+    TrainingScreen #answer-row { margin-top: 1; }
+    TrainingScreen #feedback, TrainingScreen #next {
+        width: 1fr; text-align: center; height: 1;
+    }
+    TrainingScreen #next { color: $text-muted; }
     """
 
-    def __init__(self, session: TrainingSession, warnings: Sequence[str] = ()) -> None:
+    def __init__(
+        self,
+        session: TrainingSession,
+        warnings: Sequence[str] = (),
+        *,
+        restart: Callable[[], TrainingSession] | None = None,
+    ) -> None:
         super().__init__()
         self.session = session
+        self._restart = restart
         if session.mode == "funbox":
             self.title = FUNBOX_TITLE
         self._warnings = tuple(warnings)
@@ -224,6 +299,8 @@ class TrainingScreen(Screen[None]):
         self._index = 0
         self._phase = "answer"  # answer -> cooldown -> answer ... -> done
         self._armed = False
+        self._correct = 0
+        self._wrong = 0
         self._example_started = 0.0
         self._session_started = 0.0
         self._timer: Timer | None = None
@@ -231,20 +308,34 @@ class TrainingScreen(Screen[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         with Vertical(id="training"):
-            yield Static(id="stage")
-            yield Static(id="example")
-            yield Static(id="expression")
-            yield Input(placeholder="Answer, then Enter", id="answer")
-            yield ProgressBar(total=1, show_eta=False, show_percentage=False, id="timer")
-            yield Static(id="clock")
+            with Horizontal(id="status"):
+                yield Static(id="stage")
+                yield Static(id="example")
+                yield Static(id="counts")
+            yield ProgressBar(
+                total=len(self._positions), show_eta=False, show_percentage=False, id="overall"
+            )
+            with Horizontal(id="card-row"):
+                yield Static(classes="spacer")
+                with Vertical(id="card"):
+                    yield Static(id="expression")
+                    with Horizontal(id="timer-row"):
+                        yield ProgressBar(
+                            total=1, show_eta=False, show_percentage=False, id="timer"
+                        )
+                        yield Static(id="clock")
+                yield Static(classes="spacer")
+            with Horizontal(id="answer-row"):
+                yield Static(classes="spacer")
+                yield Input(placeholder="Answer, then Enter", id="answer")
+                yield Static(classes="spacer")
             yield Static(id="feedback")
-            if self._warnings:
-                yield Static(
-                    Text("\n".join(f"Warning: {item}" for item in self._warnings), style="yellow")
-                )
+            yield Static(id="next")
         yield Footer()
 
     def on_mount(self) -> None:
+        for item in self._warnings:
+            self.notify(item, severity="warning", timeout=8)
         self._session_started = self._numbra().clock()
         self._timer = self.set_interval(0.1, self._tick)
         self._show_example()
@@ -255,15 +346,19 @@ class TrainingScreen(Screen[None]):
     def _show_example(self) -> None:
         stage_number, problem_number = self._positions[self._index]
         plan = self.session.stages[stage_number]
+        card = self.query_one("#card", Vertical)
+        card.border_title = f"{self._index + 1}/{len(self._positions)}"
+        card.border_subtitle = plan.kind.value
         self.query_one("#stage", Static).update(
-            f"Stage {plan.number}/{len(self.session.stages)} · {plan.kind.value}"
+            f"Stage {plan.number}/{len(self.session.stages)} {plan.kind.value}"
         )
         self.query_one("#example", Static).update(
             f"Example {self._index + 1}/{len(self._positions)}"
         )
         problem = plan.problems[problem_number]
-        self.query_one("#expression", Static).update(problem.expression)
+        self.query_one("#expression", Static).update(display_expression(problem.expression))
         self.query_one("#feedback", Static).update("")
+        self.query_one("#next", Static).update("")
         answer = self.query_one("#answer", Input)
         answer.value = ""
         answer.disabled = False
@@ -282,11 +377,11 @@ class TrainingScreen(Screen[None]):
             self._record(None, elapsed, timed_out=True)
             return
         remaining = limit - elapsed
-        self.query_one(ProgressBar).update(total=limit, progress=max(0.0, remaining))
-        label = (
-            f"Time left: {remaining:.1f}s" if remaining >= 0 else f"Overtime: +{-remaining:.1f}s"
+        self.query_one("#timer", ProgressBar).update(total=limit, progress=max(0.0, remaining))
+        self.query_one("#clock", Static).update(
+            f"{remaining:.1f} s" if remaining >= 0 else f"+{-remaining:.1f} s over"
         )
-        self.query_one("#clock", Static).update(label)
+        self.query_one("#card", Vertical).set_class(remaining < 0.3 * limit, "-low")
 
     @on(Input.Submitted, "#answer")
     def _answered(self, event: Input.Submitted) -> None:
@@ -300,11 +395,21 @@ class TrainingScreen(Screen[None]):
         attempt = self.session.submit(stage_number, problem_number, answer, elapsed, timed_out)
         expected = format_answer(self.session.stages[stage_number].problems[problem_number].answer)
         if attempt.timed_out:
-            message = Text.assemble(("Time! ", "bold yellow"), expected)
+            message = Text.assemble(("Time's up", "bold yellow"), f"  answer {expected}")
         elif attempt.is_correct:
-            message = Text.assemble(("Correct", "bold green"), f" · score {attempt.score:.2f}")
+            message = Text.assemble(("✓ Correct", "bold green"), f"  +{attempt.score:.2f}")
         else:
-            message = Text.assemble(("Incorrect", "bold red"), f" (answer: {expected})")
+            message = Text.assemble(("✗ Incorrect", "bold red"), f"  answer {expected}")
+        if attempt.is_correct:
+            self._correct += 1
+        else:
+            self._wrong += 1
+        self.query_one("#counts", Static).update(
+            Text.assemble(
+                ("✓ ", "green"), str(self._correct), "  ", ("✗ ", "red"), str(self._wrong)
+            )
+        )
+        self.query_one("#overall", ProgressBar).update(progress=self._index + 1)
         self._armed = False
         self.query_one("#answer", Input).disabled = True
         if self._index + 1 == len(self._positions):
@@ -312,9 +417,8 @@ class TrainingScreen(Screen[None]):
             return
         self._phase = "cooldown"
         cooldown = self.session.cooldown_seconds
-        self.query_one("#feedback", Static).update(
-            Text.assemble(message, f"\nNext example in {cooldown:g}s")
-        )
+        self.query_one("#feedback", Static).update(message)
+        self.query_one("#next", Static).update(Text(f"Next in {cooldown:g} s", style="dim"))
         self.run_worker(self._advance(), exclusive=True)
 
     async def _advance(self) -> None:
@@ -328,7 +432,7 @@ class TrainingScreen(Screen[None]):
             return
         if not self._armed:
             self._armed = True
-            self.query_one("#feedback", Static).update("Press Esc again to cancel.")
+            self.query_one("#feedback", Static).update("Press Esc again to stop. Nothing is saved.")
             return
         self._phase = "done"
         self.session.cancel()
@@ -346,9 +450,10 @@ class TrainingScreen(Screen[None]):
         previous = [] if funbox else stats.comparable_history(completed, limit=1)
         progress = [] if funbox else stats.progress_history(completed)
         stats.save(completed)
+        record = (stats.funbox_history(1) if funbox else stats.history(1))[0]
         streak = stats.streak(self._numbra().today())
         report = build_report(completed, previous[0] if previous else None, progress, streak)
-        self.app.switch_screen(SummaryScreen(completed, report))
+        self.app.switch_screen(SummaryScreen(completed, report, record, self._restart))
 
     def _stop_timer(self) -> None:
         if self._timer is not None:
@@ -362,86 +467,52 @@ class TrainingScreen(Screen[None]):
 class SummaryScreen(Screen[None]):
     """Result of a completed training; Enter or Esc returns to the menu."""
 
-    BINDINGS = [Binding("enter", "done", "Menu"), Binding("escape", "done", show=False)]
+    BINDINGS = [
+        Binding("enter", "done", "Menu"),
+        Binding("escape", "done", show=False),
+        Binding("d", "review", "Review answers"),
+        Binding("t", "again", "Train again"),
+    ]
+    SUB_TITLE = "Summary"
     DEFAULT_CSS = """
     SummaryScreen VerticalScroll { padding: 0 2; }
     """
 
-    def __init__(self, completed: CompletedTraining, report: TrainingReport) -> None:
+    def __init__(
+        self,
+        completed: CompletedTraining,
+        report: TrainingReport,
+        record: TrainingRecord,
+        restart: Callable[[], TrainingSession] | None = None,
+    ) -> None:
         super().__init__()
         self._completed = completed
         self._report = report
+        self._record = record
+        self._restart = restart
         if completed.mode == "funbox":
             self.title = FUNBOX_TITLE
 
     def compose(self) -> ComposeResult:
         yield Header()
         with VerticalScroll():
-            yield Static(_summary_markup(self._completed, self._report))
+            yield Static(summary_card(self._completed, self._report), id="summary")
         yield Footer()
 
     def action_done(self) -> None:
         self.app.pop_screen()
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "again" and self._restart is None:
+            return False
+        return super().check_action(action, parameters)
 
-def _summary_markup(completed: CompletedTraining, report: TrainingReport) -> str:
-    grade = grade_for_score(completed.score_percent)
-    lines = [
-        f"[bold]Result:[/bold] {completed.correct_answers}/{completed.total_examples} correct "
-        f"({completed.accuracy:.1%})",
-        f"[bold]Score:[/bold] {completed.score:.2f}/{completed.max_score:.2f} "
-        f"({completed.score_percent:.1%}) · [bold]Grade:[/bold] {grade}",
-        f"Target duration: {completed.duration_target_seconds:.1f}s · "
-        f"actual: {completed.actual_duration_seconds:.1f}s",
-        "",
-    ]
-    if completed.mode == "funbox":
-        lines.insert(0, f"[bold]{FUNBOX_TITLE}[/bold]")
-    for tally in report.stage_kinds:
-        lines.append(
-            f"{tally.kind.value}: {tally.correct}/{tally.total} correct, {tally.timeouts} timeouts"
-        )
-    if report.operations:
-        lines.append(
-            "Operations: "
-            + ", ".join(
-                f"{op.value} {tally.correct}/{tally.total}" for op, tally in report.operations
-            )
-        )
-    if report.topics:
-        lines.append(
-            "Topics: "
-            + ", ".join(
-                f"{topic.value} {tally.correct}/{tally.total}" for topic, tally in report.topics
-            )
-        )
-    if report.comparison is not None:
-        prior = report.comparison.previous
-        comparison = report.comparison
-        lines.append(
-            f"Previous comparable: score {prior.score_percent:.1%}, "
-            f"accuracy {prior.accuracy:.1%}, average {prior.average_response_seconds:.2f}s, "
-            f"timeouts {prior.timeouts}"
-        )
-        lines.append(
-            f"Delta: score {comparison.score_delta:+.1%} · accuracy {comparison.accuracy_delta:+.1%} · "
-            f"average {comparison.average_delta:+.2f}s · timeouts {comparison.timeouts_delta:+d}"
-        )
-    if report.average_correct_seconds is not None:
-        parts = [f"Avg correct answer: {report.average_correct_seconds:.2f}s"]
-        if report.best_correct_seconds is not None:
-            parts.append(f"best {report.best_correct_seconds:.2f}s")
-        if report.previous_correct_seconds is not None:
-            parts.append(f"previous {report.previous_correct_seconds:.2f}s")
-        lines.append(" · ".join(parts))
-    if completed.mode == "challenge":  # funbox keeps no personal best, as in the CLI
-        if report.is_new_best:
-            lines.append(
-                f"[bold green]New personal best: {completed.score_percent:.1%}![/bold green]"
-            )
-        else:
-            lines.append(f"Personal best: {report.personal_best:.1%} ({report.score_vs_best:+.1%})")
-    lines.append(f"Streak: {days(report.current_streak)} (best {report.longest_streak})")
-    if report.recommendation is not None:
-        lines.append(RECOMMENDATION_TEXT[report.recommendation])
-    return "\n".join(lines)
+    def action_review(self) -> None:
+        from .results import SessionScreen
+
+        self.app.push_screen(SessionScreen(self._record))
+
+    def action_again(self) -> None:
+        if self._restart is None:
+            return
+        self.app.switch_screen(TrainingScreen(self._restart(), restart=self._restart))

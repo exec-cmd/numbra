@@ -164,13 +164,10 @@ def test_challenge_prints_score_and_grade(monkeypatch, selection) -> None:
     )
 
     assert result.exit_code == 0
-    assert "score" in result.stdout
-    assert re.search(r"score \d+\.\d{2}/\d+\.\d{2}", result.stdout)
-    assert "grade" in result.stdout
-    assert "Topics: sqrt" in result.stdout
+    assert "Score" in result.stdout
+    assert "Accuracy" in result.stdout
+    assert "Time" in result.stdout
     plain_output = re.sub(r"\s+", " ", result.stdout)
-    expected_operations = ", ".join(selection.split(","))
-    assert f"Operations: {expected_operations}" in plain_output
     assert "Warning:" in plain_output and "using 'easy'" in plain_output
 
 
@@ -195,17 +192,16 @@ def _run_correct_challenge(monkeypatch, *extra: str):
 
 def test_first_session_prints_new_best_without_comparison(monkeypatch) -> None:
     output = _run_correct_challenge(monkeypatch)
-    assert "Avg correct answer:" in output
-    assert "New personal best:" in output
-    assert " · best " not in output
+    assert "Time" in output
+    assert "New personal best!" in output
     assert "Streak: 1 day (best 1)" in output
 
 
 def test_challenge_prints_progress_block(monkeypatch) -> None:
     _run_correct_challenge(monkeypatch, "-S", "1")
     output = _run_correct_challenge(monkeypatch, "-S", "2", "-t", "2")
-    assert re.search(r"Avg correct answer: \d+\.\d{2}s · best \d+\.\d{2}s · previous", output)
-    assert "Personal best:" in output or "New personal best:" in output
+    assert "Best" in output
+    assert "matched" in output or "to go" in output or "New personal best!" in output
     assert "Streak: 1 day (best 1)" in output
 
 

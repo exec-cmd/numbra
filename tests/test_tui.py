@@ -206,7 +206,7 @@ def test_strict_timeout_is_recorded_and_the_run_completes(tmp_path: Path) -> Non
             limit = session.time_limit_for(0, 0)
             clock.advance(limit)  # the strict limit is reached without any answer
             await wait_until(
-                pilot, lambda: "Time!" in plain_text(training.query_one("#feedback", Static))
+                pilot, lambda: "Time's up" in plain_text(training.query_one("#feedback", Static))
             )
             assert training.query_one(Input).disabled
             gate.set()
@@ -231,7 +231,7 @@ def test_soft_mode_keeps_input_open_after_the_limit(tmp_path: Path) -> None:
             training = await start_training(pilot, app)
             clock.advance(training.session.time_limit_for(0, 0) + 1.5)
             await wait_until(
-                pilot, lambda: "Overtime" in plain_text(training.query_one("#clock", Static))
+                pilot, lambda: "over" in plain_text(training.query_one("#clock", Static))
             )
             assert not training.query_one(Input).disabled
             await pilot.press("escape")

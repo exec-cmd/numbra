@@ -44,17 +44,12 @@ from ..core.models import (
     format_answer,
     parse_operation_selection,
 )
-from ..core.report import (
-    RECOMMENDATION_TEXT,
-    TrainingReport,
-    area_name,
-    build_report,
-    setup_label,
-)
+from ..core.report import TrainingReport, area_name, build_report, setup_label
 from ..core.stats import GroupStats, Stats
 from ..core.tricks import TRICKS
 from .input import cooldown, timed_prompt
 from .logging import configure_logging
+from .summary import summary_card
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -261,70 +256,11 @@ def challenge(
         progress,
         stats.streak(date.today()),
     )
-    _print_summary(completed, report, success_style)
+    _print_summary(completed, report)
 
 
-def _print_summary(
-    completed: CompletedTraining, report: TrainingReport, success_style: str
-) -> None:
-    console.print(
-        f"\n[bold]Result:[/bold] {completed.correct_answers}/{completed.total_examples} correct "
-        f"({completed.accuracy:.1%}), score {completed.score:.2f}/{completed.max_score:.2f} "
-        f"({completed.score_percent:.1%}), grade {completed.grade}, level {completed.grade}"
-    )
-    console.print(
-        f"Target duration: {completed.duration_target_seconds:.1f}s · actual: {completed.actual_duration_seconds:.1f}s"
-    )
-    for tally in report.stage_kinds:
-        console.print(
-            f"{tally.kind.value}: {tally.correct}/{tally.total} correct, {tally.timeouts} timeouts"
-        )
-    if report.operations:
-        console.print(
-            "Operations: "
-            + ", ".join(
-                f"{operation.value} {tally.correct}/{tally.total}"
-                for operation, tally in report.operations
-            )
-        )
-    if report.topics:
-        console.print(
-            "Topics: "
-            + ", ".join(
-                f"{topic.value} {tally.correct}/{tally.total}" for topic, tally in report.topics
-            )
-        )
-    if report.comparison is not None:
-        prior = report.comparison.previous
-        console.print(
-            f"Previous comparable: score {prior.score_percent:.1%}, "
-            f"accuracy {prior.accuracy:.1%}, average {prior.average_response_seconds:.2f}s, "
-            f"timeouts {prior.timeouts}"
-        )
-        comparison = report.comparison
-        console.print(
-            f"Delta: score {comparison.score_delta:+.1%} · "
-            f"accuracy {comparison.accuracy_delta:+.1%} · "
-            f"average {comparison.average_delta:+.2f}s · "
-            f"timeouts {comparison.timeouts_delta:+d}"
-        )
-    if report.average_correct_seconds is not None:
-        parts = [f"Avg correct answer: {report.average_correct_seconds:.2f}s"]
-        if report.best_correct_seconds is not None:
-            parts.append(f"best {report.best_correct_seconds:.2f}s")
-        if report.previous_correct_seconds is not None:
-            parts.append(f"previous {report.previous_correct_seconds:.2f}s")
-        console.print(" · ".join(parts))
-    if completed.mode == "challenge":
-        if report.is_new_best:
-            console.print(f"[{success_style}]New personal best: {completed.score_percent:.1%}![/]")
-        else:
-            console.print(
-                f"Personal best: {report.personal_best:.1%} ({report.score_vs_best:+.1%})"
-            )
-    console.print(f"Streak: {_days(report.current_streak)} (best {report.longest_streak})")
-    if report.recommendation is not None:
-        console.print(RECOMMENDATION_TEXT[report.recommendation])
+def _print_summary(completed: CompletedTraining, report: TrainingReport) -> None:
+    console.print(summary_card(completed, report))
 
 
 @app.command(help="List the mental-math tricks used by -o tricks.")
