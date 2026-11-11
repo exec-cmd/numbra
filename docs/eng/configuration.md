@@ -21,6 +21,8 @@ The supported difficulties are `easy`, `normal`, and `hard`. Older files that st
 
 The `[funbox]` table holds `modes = []`, a list of experimental funbox modes (`fractions`, `substitution`, `equations`, `logic`, `derivatives`). Numbra checks the names when it reads the file and reports an unknown mode with `funbox.modes`. The interactive Funbox screen starts with these modes checked. `numbra challenge --funbox` does not read this list; it uses the modes given on its command line. See [Training rules](training.md#funbox-experimental).
 
+The `[ui]` table holds `language`: `"auto"` (default) follows the `LC_ALL`, `LC_MESSAGES`, or `LANG` environment variable and picks Russian for a `ru` locale, English otherwise; `"en"` and `"ru"` fix the language. It applies to the interactive interface only, after a restart; command-line output stays English.
+
 Leave out `seed` to get a new random sequence each time. Set an integer seed when you want to repeat a generated session with matching settings.
 
 ## Change settings from the command line

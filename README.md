@@ -37,7 +37,7 @@ Or download `numbra-<version>-py3-none-any.whl` from the release assets and run 
 
 ## Quick start
 
-Run `numbra` with no arguments in a terminal to open the interactive interface: a menu for training, results, settings, tricks and experimental funbox. The commands below remain available for scripts and quick use.
+Run `numbra` with no arguments in a terminal to open the interactive interface (English or Russian): a menu for training, results, settings, tricks and experimental funbox. The commands below remain available for scripts and quick use.
 
 ```bash
 numbra                           # interactive interface
