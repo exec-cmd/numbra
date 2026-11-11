@@ -132,6 +132,7 @@ class AggregateStats:
     by_operation: dict[str, tuple[int, int]]
     by_difficulty: dict[str, tuple[int, int]]
     by_topic: dict[str, tuple[int, int]] = field(default_factory=dict)
+    average_correct_seconds: float | None = None
 
 
 class Stats:
@@ -388,6 +389,11 @@ class Stats:
                 "JOIN stages s ON s.id = a.stage_id JOIN trainings t ON t.id = s.training_id "
                 "WHERE t.status = 'completed' AND t.mode = 'challenge' AND a.timed_out = 0"
             ).fetchone()
+            correct_average_row = connection.execute(
+                "SELECT AVG(a.elapsed) AS average FROM attempts a "
+                "JOIN stages s ON s.id = a.stage_id JOIN trainings t ON t.id = s.training_id "
+                "WHERE t.status = 'completed' AND t.mode = 'challenge' AND a.is_correct = 1"
+            ).fetchone()
             operation_rows = connection.execute(
                 "SELECT a.operations, a.topics, a.is_correct, COUNT(*) AS total FROM attempts a "
                 "JOIN stages s ON s.id = a.stage_id "
@@ -429,6 +435,7 @@ class Stats:
             by_operation,
             by_difficulty,
             by_topic,
+            average_correct_seconds=correct_average_row["average"],
         )
 
     def comparable_history(

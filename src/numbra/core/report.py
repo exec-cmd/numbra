@@ -21,6 +21,46 @@ RECOMMENDATION_TEXT = {
     Recommendation.KEEP: "Recommendation: keep the current difficulty level.",
 }
 
+# One name per metric, used by the TUI, the CLI and the docs.
+METRIC_HELP: dict[str, str] = {
+    "Score": "Points for speed and difficulty, as a percent of the maximum.",
+    "Accuracy": "Share of correct answers.",
+    "Grade": "Letter for the score: S 90%+, A 75%+, B 60%+, C 40%+, D below.",
+    "Time": "Average seconds per correct answer.",
+    "Streak": "Days in a row with a completed training.",
+    "Personal best": "Best score with the same difficulty, timing mode, operations and topics.",
+}
+
+AREA_NAMES: dict[str, str] = {
+    "+": "addition",
+    "-": "subtraction",
+    "*": "multiplication",
+    "/": "division",
+    "^": "powers",
+    "power": "powers",
+    "sqrt": "square roots",
+    "trig": "trigonometry",
+    "log": "logarithms",
+}
+OPERATION_SYMBOLS: dict[str, str] = {"+": "+", "-": "−", "*": "×", "/": "÷", "^": "^"}
+
+
+def area_name(name: str) -> str:
+    """Readable name of an operation, topic or trick strategy ("*" -> "multiplication")."""
+    return AREA_NAMES.get(name, name)
+
+
+def setup_label(
+    difficulty: str, strict: bool, operations: Sequence[str], topics: Sequence[str]
+) -> str:
+    """One training setup in words: "normal, strict: + − × ÷ sqrt"."""
+    label = f"{difficulty}, strict" if strict else difficulty
+    selections = [
+        *(OPERATION_SYMBOLS.get(operation, operation) for operation in operations),
+        *topics,
+    ]
+    return f"{label}: {' '.join(selections)}" if selections else label
+
 
 @dataclass(frozen=True, slots=True)
 class Tally:
@@ -45,6 +85,7 @@ class Comparison:
     accuracy_delta: float
     average_delta: float
     timeouts_delta: int
+    correct_time_delta: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +103,20 @@ class TrainingReport:
     current_streak: int
     longest_streak: int
     recommendation: Recommendation | None
+
+    @property
+    def weakest(self) -> tuple[str, Tally] | None:
+        """Operation or topic with the lowest accuracy that has a miss; None when all are right."""
+        candidates = [
+            (name.value, tally)
+            for name, tally in (*self.operations, *self.topics)
+            if tally.correct < tally.total
+        ]
+        return min(
+            candidates,
+            key=lambda item: (item[1].correct / item[1].total, -item[1].total),
+            default=None,
+        )
 
 
 def build_report(
@@ -113,6 +168,9 @@ def build_report(
             completed.accuracy - previous.accuracy,
             completed.average_response_seconds - previous.average_response_seconds,
             completed.timeouts - previous.timeouts,
+            None
+            if completed.average_correct_seconds is None or previous.average_correct_seconds is None
+            else completed.average_correct_seconds - previous.average_correct_seconds,
         )
 
     known_times = [

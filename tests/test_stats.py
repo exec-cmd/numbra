@@ -224,6 +224,26 @@ def test_stats_saves_and_aggregates_completed_training(tmp_path: Path) -> None:
     assert aggregate.correct_answers == 1
 
 
+def test_aggregate_average_correct_seconds_uses_correct_attempts_only(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "correct-times.sqlite3")
+    _save_outcomes(stats, [(True, 1.0), (False, 9.0)], topics=())
+
+    assert stats.aggregate().average_correct_seconds == 1.0
+
+
+def test_aggregate_average_correct_seconds_is_none_when_empty(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "empty.sqlite3")
+
+    assert stats.aggregate().average_correct_seconds is None
+
+
+def test_aggregate_average_correct_seconds_ignores_funbox(tmp_path: Path) -> None:
+    stats = Stats(tmp_path / "funbox-times.sqlite3")
+    stats.save(_funbox_training(100.0))
+
+    assert stats.aggregate().average_correct_seconds is None
+
+
 def _funbox_training(started_at: float) -> CompletedTraining:
     """Same settings as _training, but one problem with no arithmetic operation or topic."""
     base = _training(started_at=started_at, topics=())

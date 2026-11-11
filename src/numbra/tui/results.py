@@ -14,8 +14,9 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Sparkline, Static, TabbedContent, TabPane
 
-from ..core.challenge import grade_for_score
+from ..core.report import area_name
 from ..core.stats import GroupStats, Stats, TrainingRecord
+from .style import days, grade_text, percent, seconds
 
 if TYPE_CHECKING:
     from .app import NumbraApp
@@ -24,32 +25,7 @@ if TYPE_CHECKING:
 HISTORY_LIMIT = 1000
 _HISTORY_HEADINGS = ("When", "Level", "Correct", "Score", "Grade", "Per answer", "Length")
 _GROUP_HEADINGS = ("", "Accuracy", "Attempts", "Per correct answer")
-# Grades in terminal palette colors, so they follow the user's theme.
-_GRADE_STYLE = {"S": "bold green", "A": "green", "B": "cyan", "C": "yellow", "D": "red"}
-_AREA_NAMES = {
-    "+": "addition",
-    "-": "subtraction",
-    "*": "multiplication",
-    "/": "division",
-    "^": "powers",
-    "power": "powers",
-    "sqrt": "square roots",
-    "trig": "trigonometry",
-    "log": "logarithms",
-}
 _BAR_WIDTH = 10
-
-
-def _days(count: int) -> str:
-    return f"{count} day" if count == 1 else f"{count} days"
-
-
-def _seconds(value: float | None) -> str:
-    return "—" if value is None else f"{value:.1f} s"
-
-
-def _percent(value: float) -> str:
-    return f"{value:.0%}"
 
 
 def _when(record: TrainingRecord, today: date) -> str:
@@ -73,21 +49,12 @@ def _length(seconds: float) -> str:
     return f"{minutes}:{rest:02d}"
 
 
-def _grade(score_percent: float) -> Text:
-    grade = grade_for_score(score_percent)
-    return Text(grade, style=_GRADE_STYLE[grade])
-
-
-def _area(name: str) -> str:
-    return _AREA_NAMES.get(name, name)
-
-
 def _bar(accuracy: float) -> Text:
     filled = round(accuracy * _BAR_WIDTH)
     return Text.assemble(
         ("█" * filled, "green" if accuracy >= 0.8 else "yellow" if accuracy >= 0.6 else "red"),
         ("░" * (_BAR_WIDTH - filled), "dim"),
-        f" {_percent(accuracy)}",
+        f" {percent(accuracy)}",
     )
 
 
@@ -97,18 +64,20 @@ def _history_rows(records: Sequence[TrainingRecord], today: date) -> list[tuple[
             _when(record, today),
             _level(record.difficulty, record.strict),
             f"{record.correct_answers}/{record.total_examples}",
-            _percent(record.score_percent),
-            _grade(record.score_percent),
-            _seconds(record.average_response_seconds),
+            percent(record.score_percent),
+            grade_text(record.score_percent),
+            seconds(record.average_response_seconds),
             _length(record.actual_duration_seconds),
         )
         for record in records
     ]
 
 
-def _group_row(name: str, attempts: int, correct: int, seconds: float | None) -> tuple[Text, ...]:
+def _group_row(
+    name: str, attempts: int, correct: int, average_seconds: float | None
+) -> tuple[Text, ...]:
     accuracy = correct / attempts if attempts else 0.0
-    return (Text(f"  {name}"), _bar(accuracy), Text(str(attempts)), Text(_seconds(seconds)))
+    return (Text(f"  {name}"), _bar(accuracy), Text(str(attempts)), Text(seconds(average_seconds)))
 
 
 def _section(title: str, items: Sequence[GroupStats]) -> list[tuple[Text, ...]]:
@@ -118,7 +87,9 @@ def _section(title: str, items: Sequence[GroupStats]) -> list[tuple[Text, ...]]:
     return [
         heading,
         *(
-            _group_row(_area(item.name), item.attempts, item.correct, item.average_correct_seconds)
+            _group_row(
+                area_name(item.name), item.attempts, item.correct, item.average_correct_seconds
+            )
             for item in items
         ),
     ]
@@ -229,8 +200,8 @@ class ResultsScreen(Screen[None]):
                     _level(record.difficulty, record.strict),
                     " ".join((*record.operations, *record.topics)),
                     str(record.sessions),
-                    _percent(record.best_score_percent),
-                    _seconds(record.best_average_correct_seconds),
+                    percent(record.best_score_percent),
+                    seconds(record.best_average_correct_seconds),
                 )
                 for record in stats.records()
             ],
@@ -268,9 +239,9 @@ class ResultsScreen(Screen[None]):
         tiles = {
             "sessions": (str(aggregate.completed_trainings), "sessions"),
             "examples": (str(aggregate.total_examples), "examples"),
-            "accuracy": (_percent(aggregate.accuracy), "accuracy"),
-            "per-answer": (_seconds(aggregate.average_response_seconds), "per answer"),
-            "streak": (_days(current), f"streak, best {longest}"),
+            "accuracy": (percent(aggregate.accuracy), "accuracy"),
+            "per-answer": (seconds(aggregate.average_response_seconds), "per answer"),
+            "streak": (days(current), f"streak, best {longest}"),
         }
         for name, (value, label) in tiles.items():
             self.query_one(f"#tile-{name}", Static).update(
@@ -282,7 +253,7 @@ class ResultsScreen(Screen[None]):
         self.query_one("#trend-title", Static).update(
             Text.assemble(
                 (f"Score over the last {len(scores)} sessions", "bold"),
-                f"   best {_percent(max(scores))}   average {_percent(sum(scores) / len(scores))}",
+                f"   best {percent(max(scores))}   average {percent(sum(scores) / len(scores))}",
             )
             if trend
             else Text("Score", style="bold")
@@ -296,19 +267,19 @@ class ResultsScreen(Screen[None]):
         self.query_one("#last", Static).update(
             Text.assemble(
                 ("Last session\n", "bold"),
-                _grade(last.score_percent),
-                f"  {_percent(last.score_percent)}  {_when(last, self._numbra().today())}\n",
+                grade_text(last.score_percent),
+                f"  {percent(last.score_percent)}  {_when(last, self._numbra().today())}\n",
                 f"{last.correct_answers} of {last.total_examples} correct, "
                 f"{_level(last.difficulty, last.strict)}\n",
-                f"{_seconds(last.average_response_seconds)} per answer",
+                f"{seconds(last.average_response_seconds)} per answer",
             )
         )
         weak = stats.weak_spots()
         practice = Text.assemble(("Practise next\n", "bold"))
         if weak:
-            width = max(len(_area(item.name)) for item in weak)
+            width = max(len(area_name(item.name)) for item in weak)
             for item in weak:
-                practice.append(f"{_area(item.name):<{width}}  ")
+                practice.append(f"{area_name(item.name):<{width}}  ")
                 practice.append_text(_bar(item.accuracy))
                 practice.append("\n")
         else:
@@ -353,8 +324,8 @@ class SessionScreen(Screen[None]):
         yield Header()
         yield Static(
             Text.assemble(
-                _grade(record.score_percent),
-                (f"  {_percent(record.score_percent)}", "bold"),
+                grade_text(record.score_percent),
+                (f"  {percent(record.score_percent)}", "bold"),
                 f"   {record.correct_answers} of {record.total_examples} correct   "
                 f"{_level(record.difficulty, record.strict)}   {_when(record, today)}",
             ),
@@ -378,7 +349,7 @@ class SessionScreen(Screen[None]):
                 item.user_answer or "—",
                 item.correct_answer,
                 _RESULT_TEXT[result],
-                _seconds(item.elapsed_seconds),
+                seconds(item.elapsed_seconds),
                 f"{item.score:.2f}",
             )
         table.focus()

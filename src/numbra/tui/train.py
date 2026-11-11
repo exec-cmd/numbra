@@ -42,6 +42,7 @@ from ..core.models import (
 )
 from ..core.report import RECOMMENDATION_TEXT, TrainingReport, build_report
 from ..core.stats import Stats
+from .style import days
 
 if TYPE_CHECKING:
     from .app import NumbraApp
@@ -383,10 +384,6 @@ class SummaryScreen(Screen[None]):
         self.app.pop_screen()
 
 
-def _days(count: int) -> str:
-    return f"{count} day" if count == 1 else f"{count} days"
-
-
 def _summary_markup(completed: CompletedTraining, report: TrainingReport) -> str:
     grade = grade_for_score(completed.score_percent)
     lines = [
@@ -444,7 +441,7 @@ def _summary_markup(completed: CompletedTraining, report: TrainingReport) -> str
             )
         else:
             lines.append(f"Personal best: {report.personal_best:.1%} ({report.score_vs_best:+.1%})")
-    lines.append(f"Streak: {_days(report.current_streak)} (best {report.longest_streak})")
+    lines.append(f"Streak: {days(report.current_streak)} (best {report.longest_streak})")
     if report.recommendation is not None:
         lines.append(RECOMMENDATION_TEXT[report.recommendation])
     return "\n".join(lines)

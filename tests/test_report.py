@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
@@ -9,7 +10,15 @@ import pytest
 
 from numbra.core.challenge import AnswerAttempt, CompletedTraining, StagePlan
 from numbra.core.models import Difficulty, Operation, Problem, StageKind, Topic
-from numbra.core.report import Recommendation, StageKindTally, Tally, TrainingReport, build_report
+from numbra.core.report import (
+    Recommendation,
+    StageKindTally,
+    Tally,
+    TrainingReport,
+    area_name,
+    build_report,
+    setup_label,
+)
 from numbra.core.stats import Stats
 
 
@@ -152,7 +161,20 @@ def test_deltas_compare_with_the_previous_comparable_training(tmp_path: Path) ->
     assert report.comparison.score_delta == pytest.approx(0.15)
     assert report.comparison.accuracy_delta == pytest.approx(0.15)
     assert report.comparison.average_delta == pytest.approx(-2.0)
+    assert report.comparison.correct_time_delta == pytest.approx(-2.0)
     assert report.comparison.timeouts_delta == 0
+
+
+def test_correct_time_delta_is_none_when_previous_has_no_correct_answers(
+    tmp_path: Path,
+) -> None:
+    stats = Stats(tmp_path / "no-correct.sqlite3")
+    _finish(stats, _training(0, started_at=1.0))
+
+    report = _finish(stats, _training(10, started_at=2.0))
+
+    assert report.comparison is not None
+    assert report.comparison.correct_time_delta is None
 
 
 def test_correct_answer_times_use_best_and_previous_group_rows(tmp_path: Path) -> None:
@@ -201,6 +223,41 @@ def test_tallies_by_stage_kind_operation_and_topic() -> None:
     # Operations sort by symbol value, so "*" comes before "+".
     assert report.operations == ((Operation.MULTIPLY, Tally(0, 1)), (Operation.ADD, Tally(1, 2)))
     assert report.topics == ((Topic.SQRT, Tally(1, 2)),)
+
+
+def test_weakest_tally_picks_lowest_accuracy() -> None:
+    base = _training(1, total=4)
+    problems = tuple(
+        Problem(
+            f"{i} + 1",
+            i + 1,
+            (Operation.MULTIPLY if i == 0 else Operation.DIVIDE,),
+            topics=(Topic.SQRT,) if i == 0 else (),
+        )
+        for i in range(4)
+    )
+    stage = replace(base.stages[0], problems=problems)
+    attempts = tuple(
+        replace(attempt, problem_number=i + 1, is_correct=i == 0)
+        for i, attempt in enumerate(base.attempts)
+    )
+    report = build_report(replace(base, stages=(stage,), attempts=attempts), None, [], (0, 0))
+
+    assert report.weakest == ("/", Tally(0, 3))
+
+
+def test_weakest_tally_is_none_when_everything_is_correct() -> None:
+    report = build_report(_training(4, total=4), None, [], (0, 0))
+
+    assert report.weakest is None
+
+
+def test_setup_label_and_area_name() -> None:
+    assert setup_label("normal", False, ("+", "*"), ("sqrt",)) == "normal: + × sqrt"
+    assert setup_label("hard", True, ("/",), ()) == "hard, strict: ÷"
+    assert setup_label("easy", False, (), ()) == "easy"
+    assert area_name("*") == "multiplication"
+    assert area_name("custom") == "custom"
 
 
 def test_streak_is_passed_through() -> None:
