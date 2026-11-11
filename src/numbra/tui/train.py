@@ -95,6 +95,10 @@ class TrainSetupScreen(Screen[None]):
     TrainSetupScreen #difficulty { width: 16; }
     TrainSetupScreen #duration, TrainSetupScreen #stages { width: 7; }
     TrainSetupScreen #seed { width: 16; }
+    TrainSetupScreen Input, TrainSetupScreen SelectCurrent { background: $foreground 8%; }
+    TrainSetupScreen Input:focus, TrainSetupScreen Select:focus > SelectCurrent {
+        background: $foreground 16%;
+    }
     TrainSetupScreen #strict { margin-left: 3; }
     TrainSetupScreen Checkbox, TrainSetupScreen Checkbox:focus { border: none; }
     TrainSetupScreen .section {

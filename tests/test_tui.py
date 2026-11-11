@@ -20,7 +20,6 @@ from textual.widgets import (
     Input,
     OptionList,
     Select,
-    Sparkline,
     Static,
     TabbedContent,
 )
@@ -441,7 +440,7 @@ def test_results_tabs_show_saved_statistics(tmp_path: Path) -> None:
             last = plain_text(results.query_one("#last", Static))
             assert f"{total} of {total} correct" in last
             # The trend needs two sessions; the hint takes its place.
-            assert not results.query_one("#trend", Sparkline).display
+            assert not results.query_one("#trend", Static).display
             assert results.query_one("#trend-hint").display
 
     asyncio.run(scenario())

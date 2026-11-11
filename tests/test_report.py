@@ -254,6 +254,7 @@ def test_weakest_tally_is_none_when_everything_is_correct() -> None:
 
 def test_setup_label_and_area_name() -> None:
     assert setup_label("normal", False, ("+", "*"), ("sqrt",)) == "normal: + × sqrt"
+    assert setup_label("normal", False, ("*", "+", "-", "/"), ()) == "normal: + − × ÷"
     assert setup_label("hard", True, ("/",), ()) == "hard, strict: ÷"
     assert setup_label("easy", False, (), ()) == "easy"
     assert area_name("*") == "multiplication"

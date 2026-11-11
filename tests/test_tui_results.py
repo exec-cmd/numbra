@@ -63,6 +63,33 @@ def test_overview_time_uses_correct_attempts_only(tmp_path) -> None:
     asyncio.run(scenario())
 
 
+def test_overview_trend_uses_fixed_scale_and_shows_newest_sessions(tmp_path) -> None:
+    async def scenario() -> None:
+        save_completed_session(tmp_path)
+        save_completed_session(tmp_path)
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test(size=(80, 24)) as pilot:
+            results = await open_results(pilot, app)
+            trend = results.query_one("#trend", Static)
+            assert len(trend.content.plain) == 2
+            assert trend.content.plain == "██"
+            assert "scale 0–100%" in plain_text(results.query_one("#trend-title", Static))
+
+    asyncio.run(scenario())
+
+
+def test_overview_trend_keeps_the_two_session_hint(tmp_path) -> None:
+    async def scenario() -> None:
+        save_completed_session(tmp_path)
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            results = await open_results(pilot, app)
+            assert not results.query_one("#trend", Static).display
+            assert results.query_one("#trend-hint", Static).display
+
+    asyncio.run(scenario())
+
+
 def test_funbox_does_not_change_overview_session_count(tmp_path) -> None:
     async def scenario() -> None:
         save_funbox_session(tmp_path)

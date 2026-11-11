@@ -13,11 +13,12 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen, Screen
-from textual.widgets import DataTable, Footer, Header, Sparkline, Static, TabbedContent, TabPane
+from textual.widgets import DataTable, Footer, Header, Static, TabbedContent, TabPane
 
+from ..core.challenge import grade_for_score
 from ..core.report import METRIC_HELP, area_name, setup_label
 from ..core.stats import AttemptRecord, GroupStats, Stats, TrainingRecord
-from .style import days, display_expression, grade_text, percent, seconds
+from .style import GRADE_STYLE, days, display_expression, grade_text, percent, seconds
 
 if TYPE_CHECKING:
     from .app import NumbraApp
@@ -92,7 +93,7 @@ class ResultsScreen(Screen[None]):
     ResultsScreen #tiles { height: 3; margin-bottom: 1; }
     ResultsScreen .tile { width: 1fr; height: 3; }
     ResultsScreen #trend-title { margin-top: 1; }
-    ResultsScreen #trend { height: 3; margin-bottom: 1; }
+    ResultsScreen #trend { height: 1; margin-bottom: 1; }
     ResultsScreen #details { height: auto; }
     ResultsScreen #last, ResultsScreen #practice { width: 1fr; height: auto; }
     ResultsScreen .note { color: $text-muted; }
@@ -119,7 +120,7 @@ class ResultsScreen(Screen[None]):
                         for name in ("sessions", "accuracy", "time", "streak"):
                             yield Static(id=f"tile-{name}", classes="tile")
                     yield Static(id="trend-title")
-                    yield Sparkline(id="trend")
+                    yield Static(id="trend")
                     yield Static(
                         "Complete two sessions to see the trend.", id="trend-hint", classes="note"
                     )
@@ -243,18 +244,26 @@ class ResultsScreen(Screen[None]):
 
         scores = [record.score_percent for record in self._history]
         trend = len(scores) >= 2
+        trend_widget = self.query_one("#trend", Static)
+        available_width = max(1, self.size.width - 4) if self.size.width else 60
+        shown_scores = list(reversed(scores))[-available_width:]
         title = (
             Text.assemble(
-                (f"Score, last {len(scores)} sessions (oldest left)", "bold"),
+                (f"Score, last {len(shown_scores)} sessions (oldest left)", "bold"),
                 f"   best {percent(max(scores))}, average {percent(sum(scores) / len(scores))}",
+                ("   scale 0–100%", "dim"),
             )
             if trend
-            else Text(f"Score, last {len(scores)} sessions (oldest left)", style="bold")
+            else Text(f"Score, last {len(shown_scores)} sessions (oldest left)", style="bold")
         )
         self.query_one("#trend-title", Static).update(title)
-        sparkline = self.query_one("#trend", Sparkline)
-        sparkline.display = trend
-        sparkline.data = list(reversed(scores)) if trend else None
+        bars = Text()
+        for score in shown_scores:
+            grade = grade_for_score(score)
+            index = min(8, max(1, round(score * 8))) if score > 0 else 0
+            bars.append("·" if index == 0 else " ▁▂▃▄▅▆▇█"[index], GRADE_STYLE[grade])
+        trend_widget.update(bars)
+        trend_widget.display = trend
         self.query_one("#trend-hint").display = not trend
 
         last_widget = self.query_one("#last", Static)

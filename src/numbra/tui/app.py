@@ -186,6 +186,16 @@ class NumbraApp(App[None]):
     ENABLE_COMMAND_PALETTE = False
     CSS = """
     HeaderIcon { display: none; }
+    * {
+        scrollbar-size-vertical: 1;
+        scrollbar-color: $foreground 30%;
+        scrollbar-color-hover: $foreground 45%;
+        scrollbar-color-active: $foreground 60%;
+        scrollbar-background: $foreground 5%;
+    }
+    OptionList > .option-list--option-highlighted {
+        background: $foreground 15%; color: $foreground; text-style: bold;
+    }
     DataTable > .datatable--header { background: transparent; color: $text-muted; text-style: bold; }
     DataTable > .datatable--cursor { background: $foreground 15%; color: $foreground; text-style: bold; }
     DataTable:focus > .datatable--cursor { background: $foreground 25%; }

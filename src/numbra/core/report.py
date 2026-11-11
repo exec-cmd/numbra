@@ -55,8 +55,15 @@ def setup_label(
 ) -> str:
     """One training setup in words: "normal, strict: + − × ÷ sqrt"."""
     label = f"{difficulty}, strict" if strict else difficulty
+    operation_order = {
+        operation: index for index, operation in enumerate(("+", "-", "*", "/", "^"))
+    }
+    ordered_operations = sorted(
+        enumerate(operations),
+        key=lambda item: (operation_order.get(item[1], len(operation_order)), item[0]),
+    )
     selections = [
-        *(OPERATION_SYMBOLS.get(operation, operation) for operation in operations),
+        *(OPERATION_SYMBOLS.get(operation, operation) for _, operation in ordered_operations),
         *topics,
     ]
     return f"{label}: {' '.join(selections)}" if selections else label
