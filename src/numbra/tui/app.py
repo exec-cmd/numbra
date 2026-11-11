@@ -76,6 +76,12 @@ class MenuScreen(Screen[None]):
 
 class NumbraApp(App[None]):
     TITLE = "Numbra"
+    # The palette only offers theme switching, which the ANSI themes make pointless.
+    ENABLE_COMMAND_PALETTE = False
+    CSS = """
+    HeaderIcon { display: none; }
+    DataTable > .datatable--header { background: transparent; color: $text-muted; text-style: bold; }
+    """
 
     def __init__(
         self,
