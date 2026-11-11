@@ -187,6 +187,8 @@ class NumbraApp(App[None]):
     CSS = """
     HeaderIcon { display: none; }
     DataTable > .datatable--header { background: transparent; color: $text-muted; text-style: bold; }
+    DataTable > .datatable--cursor { background: $foreground 15%; color: $foreground; text-style: bold; }
+    DataTable:focus > .datatable--cursor { background: $foreground 25%; }
     """
 
     def __init__(

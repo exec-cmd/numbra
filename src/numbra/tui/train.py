@@ -89,19 +89,19 @@ class TrainSetupScreen(Screen[None]):
     CHOICES_LABEL = "Operations and topics"
     DEFAULT_CSS = """
     TrainSetupScreen VerticalScroll { padding: 1 2; }
-    TrainSetupScreen .row { height: 3; }
-    TrainSetupScreen .row Label { width: 11; height: 3; content-align: left middle; }
+    TrainSetupScreen .row { height: 1; }
+    TrainSetupScreen .row Label { width: 11; height: 1; content-align: left middle; }
     TrainSetupScreen .row .after { width: auto; margin-left: 3; padding-right: 1; }
     TrainSetupScreen #difficulty { width: 16; }
     TrainSetupScreen #duration, TrainSetupScreen #stages { width: 7; }
     TrainSetupScreen #seed { width: 16; }
-    TrainSetupScreen #strict { margin: 1 0 0 3; }
+    TrainSetupScreen #strict { margin-left: 3; }
     TrainSetupScreen Checkbox, TrainSetupScreen Checkbox:focus { border: none; }
     TrainSetupScreen .section {
         border: round $panel-lighten-2; height: auto; padding: 0 1; margin-bottom: 1;
     }
     TrainSetupScreen #choices {
-        grid-size: 3; height: auto; margin-bottom: 1;
+        grid-size: 3; height: auto;
     }
     TrainSetupScreen #summary { color: $text-muted; height: 1; }
     TrainSetupScreen #error { color: $error; height: auto; }
@@ -130,20 +130,25 @@ class TrainSetupScreen(Screen[None]):
                         [(level.value, level) for level in Difficulty],
                         value=challenge.difficulty,
                         allow_blank=False,
+                        compact=True,
                         id="difficulty",
                     )
                     yield Label("Minutes", classes="after")
-                    yield Input(str(challenge.duration_minutes), id="duration")
+                    yield Input(str(challenge.duration_minutes), compact=True, id="duration")
                     yield Label("Stages", classes="after")
-                    yield Input(str(challenge.stages), id="stages")
+                    yield Input(str(challenge.stages), compact=True, id="stages")
                 with Horizontal(classes="row"):
                     yield Label("Seed")
                     yield Input(
                         "" if challenge.seed is None else str(challenge.seed),
                         placeholder="random",
+                        compact=True,
                         id="seed",
                     )
-                    yield Tick("strict: an example ends at its limit", compact=True, id="strict")
+                with Horizontal(classes="row"):
+                    yield Tick(
+                        "strict: an example ends at its time limit", compact=True, id="strict"
+                    )
             with Vertical(id="practise", classes="section") as practise:
                 practise.border_title = self.CHOICES_LABEL
                 with Grid(id="choices"):
@@ -254,7 +259,7 @@ class TrainingScreen(Screen[None]):
     TrainingScreen #status #example { width: 1fr; text-align: center; }
     TrainingScreen #status #counts { width: 1fr; text-align: right; }
     TrainingScreen #overall { margin: 0 2; width: 1fr; }
-    TrainingScreen #overall Bar { width: 1fr; }
+    TrainingScreen #overall, TrainingScreen #overall Bar { width: 1fr; }
     TrainingScreen #card-row, TrainingScreen #answer-row { width: 1fr; height: auto; }
     TrainingScreen .spacer { width: 1fr; height: 1; }
     TrainingScreen #card {
@@ -266,7 +271,7 @@ class TrainingScreen(Screen[None]):
     }
     TrainingScreen #timer-row { height: 1; margin-top: 1; }
     TrainingScreen #timer { width: 1fr; }
-    TrainingScreen #timer Bar { width: 1fr; }
+    TrainingScreen #timer, TrainingScreen #timer Bar { width: 1fr; }
     TrainingScreen #clock { width: 12; text-align: right; }
     TrainingScreen #card.-low #timer Bar > .bar--bar { color: $warning; }
     TrainingScreen #card.-low #clock { color: $warning; }
@@ -311,7 +316,7 @@ class TrainingScreen(Screen[None]):
             with Horizontal(id="status"):
                 yield Static(id="stage")
                 yield Static(id="example")
-                yield Static(id="counts")
+                yield Static(self._counts(), id="counts")
             yield ProgressBar(
                 total=len(self._positions), show_eta=False, show_percentage=False, id="overall"
             )
@@ -404,11 +409,7 @@ class TrainingScreen(Screen[None]):
             self._correct += 1
         else:
             self._wrong += 1
-        self.query_one("#counts", Static).update(
-            Text.assemble(
-                ("✓ ", "green"), str(self._correct), "  ", ("✗ ", "red"), str(self._wrong)
-            )
-        )
+        self.query_one("#counts", Static).update(self._counts())
         self.query_one("#overall", ProgressBar).update(progress=self._index + 1)
         self._armed = False
         self.query_one("#answer", Input).disabled = True
@@ -454,6 +455,11 @@ class TrainingScreen(Screen[None]):
         streak = stats.streak(self._numbra().today())
         report = build_report(completed, previous[0] if previous else None, progress, streak)
         self.app.switch_screen(SummaryScreen(completed, report, record, self._restart))
+
+    def _counts(self) -> Text:
+        return Text.assemble(
+            ("✓ ", "green"), str(self._correct), "  ", ("✗ ", "red"), str(self._wrong)
+        )
 
     def _stop_timer(self) -> None:
         if self._timer is not None:

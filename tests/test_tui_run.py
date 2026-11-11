@@ -14,12 +14,13 @@ from test_tui import (
     start_training,
     wait_until,
 )
-from textual.widgets import Input, ProgressBar, Static
+from textual.widgets import Button, Checkbox, Input, ProgressBar, Static
 
 from numbra.core.challenge import Challenge, ChallengeOptions, TrainingSession
 from numbra.core.funbox import FunboxMode
 from numbra.core.models import Difficulty, Operation, format_answer
 from numbra.core.report import build_report
+from numbra.tui.funbox import FunboxSetupScreen
 from numbra.tui.results import SessionScreen
 from numbra.tui.train import SummaryScreen, TrainingScreen, TrainSetupScreen
 
@@ -114,6 +115,42 @@ def test_tick_updates_timer_without_advancing_overall_progress(tmp_path: Path) -
     asyncio.run(scenario())
 
 
+def test_training_progress_bars_fill_available_width_at_80_columns(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test(size=(80, 24)) as pilot:
+            training = await start_training(pilot, app)
+            assert training.query_one("#overall Bar").region.width >= 70
+            assert training.query_one("#timer Bar").region.width >= 40
+            await pilot.press("escape")
+            await pilot.press("escape")
+
+    asyncio.run(scenario())
+
+
+def test_setup_forms_fit_at_80_columns_without_scrolling(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("t")
+            await wait_until(pilot, lambda: isinstance(app.screen, TrainSetupScreen))
+            for screen_type, key in ((TrainSetupScreen, "t"), (FunboxSetupScreen, "f")):
+                screen = app.screen
+                assert isinstance(screen, screen_type)
+                start = screen.query_one("#start", Button)
+                scroll = screen.query_one("VerticalScroll")
+                assert start.region.bottom <= 23
+                assert scroll.max_scroll_y == 0
+                if key == "t":
+                    await pilot.press("escape")
+                    await pilot.press("f")
+                    await wait_until(pilot, lambda: isinstance(app.screen, FunboxSetupScreen))
+                else:
+                    await pilot.press("escape")
+
+    asyncio.run(scenario())
+
+
 def test_summary_review_and_train_again(tmp_path: Path) -> None:
     async def scenario() -> None:
         settings = make_settings(tmp_path, operations=(Operation.ADD, Operation.MULTIPLY))
@@ -153,6 +190,9 @@ def test_setup_summary_checkbox_label_and_ctrl_s(tmp_path: Path) -> None:
             await wait_until(pilot, lambda: isinstance(app.screen, TrainSetupScreen))
             setup = app.screen
             assert "multiplication" in str(setup._boxes["*"].label)
+            assert str(setup.query_one("#strict", Checkbox).label) == (
+                "strict: an example ends at its time limit"
+            )
             setup.query_one("#duration", Input).value = "2"
             await pilot.pause()
             assert plain_text(setup.query_one("#summary", Static)).startswith("2 min, 1 stages")

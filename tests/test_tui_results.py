@@ -2,7 +2,9 @@
 
 import asyncio
 import sqlite3
+from io import StringIO
 
+from rich.console import Console
 from test_tui import (
     FakeClock,
     make_app,
@@ -34,6 +36,7 @@ def test_results_has_three_tabs_and_merges_sessions_newest_first(tmp_path) -> No
             results = await open_results(pilot, app)
             tabs = results.query_one(TabbedContent).query("TabPane")
             assert [pane.id for pane in tabs] == ["overview-tab", "sessions-tab", "skills-tab"]
+            assert results.query_one("#bests-title", Static).styles.text_style.bold
             table = results.query_one("#sessions", DataTable)
             assert table.row_count == 2
             assert "funbox:" in str(table.get_row_at(0)[1])
@@ -114,6 +117,11 @@ def test_funbox_session_detail_keeps_funbox_setup_label(tmp_path) -> None:
 
 
 def test_question_mark_opens_and_escape_closes_metric_legend(tmp_path) -> None:
+    legend_binding = next(
+        binding for binding in ResultsScreen.BINDINGS if binding.action == "legend"
+    )
+    assert (legend_binding.description, legend_binding.key_display) == ("Legend", "?")
+
     async def scenario() -> None:
         save_completed_session(tmp_path)
         app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
@@ -121,8 +129,11 @@ def test_question_mark_opens_and_escape_closes_metric_legend(tmp_path) -> None:
             await open_results(pilot, app)
             await pilot.press("?")
             await wait_until(pilot, lambda: isinstance(app.screen, LegendScreen))
-            content = plain_text(app.screen.query_one("#legend", Static))
+            buffer = StringIO()
+            Console(file=buffer, width=80).print(app.screen.query_one("#legend", Static).content)
+            content = buffer.getvalue()
             assert all(name in content for name in METRIC_HELP)
+            assert app.screen.query_one("#legend", Static).region.bottom <= 23
             await pilot.press("escape")
             await wait_until(pilot, lambda: isinstance(app.screen, ResultsScreen))
 
@@ -152,6 +163,10 @@ def test_session_numbers_continue_across_stages_and_m_filters_correct_rows(tmp_p
             await wait_until(pilot, lambda: isinstance(app.screen, SessionScreen))
             table = app.screen.query_one("#attempts", DataTable)
             assert table.get_row_at(table.row_count - 1)[0].plain == str(session.total_examples)
+            wrong_cells, correct_cells = table.get_row_at(0), table.get_row_at(1)
+            assert [cell.justify for cell in wrong_cells] == [
+                cell.justify for cell in correct_cells
+            ]
             assert plain_text(app.screen.query_one("#session-note", Static)) == (
                 "✗ 2 mistakes   (m: show mistakes only)"
             )

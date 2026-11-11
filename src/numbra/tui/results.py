@@ -6,6 +6,7 @@ from collections.abc import Iterable, Sequence
 from datetime import date, datetime
 from typing import TYPE_CHECKING, cast
 
+from rich.table import Table
 from rich.text import Text
 from textual import on
 from textual.app import ComposeResult
@@ -82,7 +83,7 @@ class ResultsScreen(Screen[None]):
     BINDINGS = [
         Binding("escape", "back", "Back"),
         Binding("r", "reload", "Reload"),
-        Binding("question_mark", "legend", "? Legend"),
+        Binding("question_mark", "legend", "Legend", key_display="?"),
     ]
     DEFAULT_CSS = """
     ResultsScreen #empty { padding: 1 2; }
@@ -95,7 +96,7 @@ class ResultsScreen(Screen[None]):
     ResultsScreen #details { height: auto; }
     ResultsScreen #last, ResultsScreen #practice { width: 1fr; height: auto; }
     ResultsScreen .note { color: $text-muted; }
-    ResultsScreen #bests-title { margin-top: 1; }
+    ResultsScreen #bests-title { margin-top: 1; text-style: bold; }
     ResultsScreen #skills-note { margin: 1 2; }
     """
 
@@ -303,15 +304,17 @@ class LegendScreen(ModalScreen[None]):
     ]
     DEFAULT_CSS = """
     LegendScreen { align: center middle; }
-    LegendScreen #legend { width: 64; height: auto; border: round $accent; padding: 1 2; background: $surface; }
+    LegendScreen #legend { width: 72; max-width: 100%; max-height: 100%; overflow-y: auto; border: round $accent; padding: 1 2; background: $surface; }
     """
 
     def compose(self) -> ComposeResult:
-        legend = Text.assemble(("Metrics\n\n", "bold"))
+        table = Table.grid(padding=(0, 2))
         for name, meaning in METRIC_HELP.items():
-            legend.append(name, style="bold")
-            legend.append(f"\n{meaning}\n\n")
-        yield Static(legend, id="legend")
+            table.add_row(Text(name, style="bold"), meaning)
+        box = Static(table, id="legend")
+        box.border_title = "Metrics"
+        box.border_subtitle = "Esc closes"
+        yield box
 
     def action_close(self) -> None:
         self.dismiss()
@@ -410,12 +413,9 @@ class SessionScreen(Screen[None]):
                 _right(f"{item.score:.2f}"),
             )
             row_style = style if style != "green" else ""
-            table.add_row(
-                *(
-                    Text(value.plain, style=row_style or value.style, justify=value.justify)
-                    for value in values
-                )
-            )
+            for cell in values:
+                cell.stylize(row_style)
+            table.add_row(*values)
 
     def action_back(self) -> None:
         self.app.pop_screen()

@@ -229,12 +229,14 @@ class SettingsScreen(Screen[None]):
             rows = grouped.get(group, [])
             if not rows:
                 continue
-            table.add_row(Text(group, style="bold"), "", key=f"group:{group}")
+            table.add_row(Text(group, style="bold"), Text(""), key=f"group:{group}")
             for key, value in rows:
                 _, label, _ = _metadata(key)
-                table.add_row(label, _display_value(value), key=key)
+                table.add_row(Text(f"  {label}"), _display_value(value), key=key)
         if select is not None and select in {row.key.value for row in table.ordered_rows}:
             table.move_cursor(row=table.get_row_index(select))
+        elif table.row_count > 1:
+            table.move_cursor(row=1)
         key = str(table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value)
         self.query_one("#help", Static).update(_metadata(key)[2])
 
@@ -273,13 +275,15 @@ class SettingEditor(ModalScreen[bool]):
         )
 
     def compose(self) -> ComposeResult:
-        yield Vertical(
+        box = Vertical(
             Static(Text(self.label, style="bold"), id="modal-title"),
             Static(self.help_text, id="modal-help"),
             self._control(),
             Static(id="modal-error"),
             Button("Save", id="save"),
         )
+        box.border_subtitle = "Enter saves, Esc cancels"
+        yield box
 
     def on_mount(self) -> None:
         if self.kind == "text":

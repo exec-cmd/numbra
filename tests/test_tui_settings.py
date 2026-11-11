@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from test_tui import FakeClock, make_app, make_settings, open_settings, plain_text, wait_until
+from textual.containers import Vertical
 from textual.pilot import Pilot
 from textual.widgets import Button, DataTable, Input, OptionList, SelectionList, Static
 
@@ -24,13 +25,17 @@ def test_rows_show_readable_names_groups_and_values(tmp_path: Path) -> None:
         async with app.run_test() as pilot:
             screen = await open_settings(pilot, app)
             table = screen.query_one(DataTable)
-            assert table.get_row("challenge.duration_minutes")[0] == "Length, minutes"
-            assert table.get_row("challenge.difficulty")[0] == "Difficulty"
+            assert table.get_row("challenge.duration_minutes")[0].plain == "  Length, minutes"
+            assert table.get_row("challenge.difficulty")[0].plain == "  Difficulty"
             assert table.get_row("challenge.operations")[1] == "+ − × ÷"
             assert table.get_row("features.sqrt")[1] == "off"
             keys = [row.key.value for row in table.ordered_rows]
             assert "group:Training" in keys
             assert "group:Topics" in keys
+            assert table.get_row("group:Training")[0].plain == "Training"
+            assert table.get_row("group:Training")[0].style == "bold"
+            assert table.cursor_row == 1
+            assert plain_text(screen.query_one("#help", Static)) == "How long one training lasts."
 
     asyncio.run(scenario())
 
@@ -56,6 +61,7 @@ def test_difficulty_modal_saves_hard(tmp_path: Path) -> None:
             screen = await open_settings(pilot, app)
             await open_setting(pilot, screen, "challenge.difficulty")
             await wait_until(pilot, lambda: app.screen is not screen)
+            assert app.screen.query_one(Vertical).border_subtitle == "Enter saves, Esc cancels"
             options = app.screen.query_one("#value", OptionList)
             options.highlighted = 2
             await pilot.press("enter")
