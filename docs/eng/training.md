@@ -18,7 +18,7 @@ Advanced topics are bounded: square roots cover perfect squares with roots 2–2
 
 ## Tricks
 
-The `tricks` topic has nineteen tricks; `numbra tricks` lists them. Each problem is a single trick with no extra steps, and its work units are set by the trick and the size of its numbers instead of by the general heuristic, because a trick makes large-looking numbers cheap. Tricks use their own result limits: 400 on `easy`, 2,500 on `normal`, and 10,000 on `hard`. Not every trick exists on every level, and on `hard` trick problems are worth 4–5 units. A session rotates through the available tricks, and tricks do not count toward operation balance.
+The `tricks` topic has twenty-four tricks; `numbra tricks` lists them. Each problem is a single trick with no extra steps, and its work units are set by the trick and the size of its numbers instead of by the general heuristic, because a trick makes large-looking numbers cheap. Tricks use their own result limits: 400 on `easy`, 2,500 on `normal`, and 10,000 on `hard`. Not every trick exists on every level, and on `hard` trick problems are worth 4–5 units. A session rotates through the available tricks, and tricks do not count toward operation balance.
 
 ## Funbox (experimental)
 

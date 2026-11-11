@@ -13,9 +13,9 @@ from numbra.core.tricks import TRICKS, trick_catalog
 IDS = [trick.id for trick in TRICKS]
 
 
-def test_registry_lists_nineteen_unique_tricks() -> None:
-    assert len(IDS) == 19
-    assert len(set(IDS)) == 19
+def test_registry_lists_twenty_four_unique_tricks() -> None:
+    assert len(IDS) == 24
+    assert len(set(IDS)) == 24
     assert all(trick.rule and trick.example for trick in TRICKS)
 
 
@@ -59,6 +59,17 @@ def test_trick_problems_are_tagged_and_exact() -> None:
         ("36 * 125", "times-125", 4),
         ("372 / 4", "divide-by-4-or-8", 2),
         ("1672 / 8", "divide-by-4-or-8", 4),
+        ("13 * 93", "tens-sum-10", 3),
+        ("37 * 77", "tens-sum-10", 4),
+        ("23 * 14", "times-teens", 2),
+        ("34 * 12", "times-teens", 3),
+        ("572 / 11", "divide-by-11", 2),
+        ("638 / 11", "divide-by-11", 3),
+        ("37 * 75", "times-75", 4),
+        ("350 / 50", "divide-by-50-or-125", 2),
+        ("1150 / 50", "divide-by-50-or-125", 3),
+        ("375 / 125", "divide-by-50-or-125", 3),
+        ("3250 / 125", "divide-by-50-or-125", 4),
     ],
 )
 def test_trick_units_match_table(expression: str, strategy: str, units: int) -> None:
@@ -147,6 +158,15 @@ def test_tricks_seed_reproduces() -> None:
     first = _session(operations=(Topic.TRICKS,), seed=9)
     second = _session(operations=(Topic.TRICKS,), seed=9)
     assert first.stages == second.stages
+
+
+def test_new_tricks_have_levels() -> None:
+    from numbra.core.generator import trick_levels
+
+    levels = trick_levels()
+    assert {"tens-sum-10", "times-teens", "divide-by-11", "times-75", "divide-by-50-or-125"} <= set(
+        levels
+    )
 
 
 @pytest.mark.parametrize("trick", TRICKS, ids=IDS)

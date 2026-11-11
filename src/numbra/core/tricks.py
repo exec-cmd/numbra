@@ -81,6 +81,27 @@ TRICKS = (
     TrickInfo(
         "divide-by-4-or-8", "Halve twice for 4, three times for 8.", "372 / 4 = 186 / 2 = 93"
     ),
+    TrickInfo(
+        "tens-sum-10",
+        "Same units, tens sum to 10: tens product plus the unit, then the unit squared.",
+        "37 * 77 = 28|49 = 2849",
+    ),
+    TrickInfo(
+        "times-teens",
+        "Multiply by 10, then add the number times the units digit.",
+        "34 * 12 = 340 + 68 = 408",
+    ),
+    TrickInfo(
+        "divide-by-11",
+        "Undo times 11: the outer digits of the dividend, less any carry, give the quotient.",
+        "572 / 11 = 5|2 = 52",
+    ),
+    TrickInfo("times-75", "Multiply by 3, then by 25.", "37 * 75 = 111 * 25 = 2775"),
+    TrickInfo(
+        "divide-by-50-or-125",
+        "Divide by 50 as * 2 / 100, by 125 as * 8 / 1000.",
+        "3250 / 125 = 26000 / 1000 = 26",
+    ),
 )
 
 
@@ -175,6 +196,33 @@ def _candidates() -> Iterator[tuple[Expr, str, int]]:
             if dividend % 100:
                 units = small if dividend < 1000 else large
                 yield B("/", N(dividend), N(divisor)), "divide-by-4-or-8", units
+    for a in range(1, 10):
+        c = 10 - a
+        if a < c:
+            for unit in range(1, 10):
+                yield (
+                    B("*", N(10 * a + unit), N(10 * c + unit)),
+                    "tens-sum-10",
+                    3 if a == 1 else 4,
+                )
+    for k in (12, 13, 14, 16, 17, 18):
+        for x in _plain(12, 100):
+            yield B("*", N(x), N(k)), "times-teens", 2 if x < 25 else 3
+    for q in _plain(12, 100):
+        yield B("/", N(11 * q), N(11)), "divide-by-11", 2 if sum(divmod(q, 10)) < 10 else 3
+    for x in _plain(13, 100, 2):
+        yield B("*", N(x), N(75)), "times-75", 4
+    for q in range(3, 200, 2):
+        dividend = 50 * q
+        yield B("/", N(dividend), N(50)), "divide-by-50-or-125", 2 if dividend < 1000 else 3
+    for q in range(3, 81):
+        if q % 8:
+            dividend = 125 * q
+            yield (
+                B("/", N(dividend), N(125)),
+                "divide-by-50-or-125",
+                3 if dividend < 1000 else 4,
+            )
 
 
 @lru_cache(maxsize=8)
