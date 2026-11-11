@@ -9,7 +9,7 @@ from numbra.i18n import MISSES
 from numbra.tui.app import MenuScreen
 from numbra.tui.funbox import FunboxSetupScreen
 from numbra.tui.results import LegendScreen, ResultsScreen, SessionScreen
-from numbra.tui.settings import SettingEditor, SettingsScreen
+from numbra.tui.settings import _LABELS, SettingEditor, SettingsScreen
 from numbra.tui.train import SummaryScreen, TrainingScreen, TrainSetupScreen
 from numbra.tui.tricks import TricksScreen
 
@@ -95,10 +95,8 @@ def test_tui_screens_render_in_russian(tmp_path) -> None:
                 await pilot.pause()
 
             paths = ConfigPaths.from_root(tmp_path / "config")
-            for key, label, help_text, current in (
-                ("challenge.difficulty", "Difficulty", "Default level", "normal"),
-                ("ui.language", "Language", "Language setting", "ru"),
-            ):
+            for key, current in (("challenge.difficulty", "normal"), ("ui.language", "ru")):
+                _, label, help_text = _LABELS[key]
                 app.push_screen(SettingEditor(paths, key, label, help_text, current))
                 await pilot.pause()
                 await pilot.press("escape")

@@ -283,18 +283,26 @@ class ResultsScreen(Screen[None]):
         trend_widget = self.query_one("#trend", Static)
         available_width = max(1, self.size.width - 4) if self.size.width else 60
         shown_scores = list(reversed(scores))[-available_width:]
+        trend_title = t("Score, last {sessions} (oldest left)").format(
+            sessions=tn(len(shown_scores), "{n} session", "{n} sessions").format(
+                n=len(shown_scores)
+            )
+        )
         title = (
             Text.assemble(
                 (
-                    f"{t('Score')}, {t('last')} {tn(len(shown_scores), '{n} session', '{n} sessions').format(n=len(shown_scores))} ({t('oldest left')})",
+                    trend_title,
                     "bold",
                 ),
-                f"   {t('Best').lower()} {percent(max(scores))}, {t('average')} {percent(sum(scores) / len(scores))}",
+                "   "
+                + t("best {best}, average {average}").format(
+                    best=percent(max(scores)), average=percent(sum(scores) / len(scores))
+                ),
                 (f"   {t('scale 0–100%')}", "dim"),
             )
             if trend
             else Text(
-                f"{t('Score')}, {tn(len(shown_scores), '{n} session', '{n} sessions').format(n=len(shown_scores))} ({t('oldest left')})",
+                trend_title,
                 style="bold",
             )
         )
@@ -314,10 +322,13 @@ class ResultsScreen(Screen[None]):
             last_widget.display = True
             last_widget.update(
                 Text.assemble(
-                    (f"{t('Last')} {t('Session').lower()}\n", "bold"),
+                    (t("Last session") + "\n", "bold"),
                     grade_text(last.score_percent),
                     f" {percent(last.score_percent)}, {_when(last, self._numbra().today())}\n",
-                    f"{last.correct_answers} {t('of')} {last.total_examples} {t('Correct').lower()}, {_setup(last)}\n",
+                    t("{correct} of {total} correct").format(
+                        correct=last.correct_answers, total=last.total_examples
+                    )
+                    + f", {_setup(last)}\n",
                     f"{seconds(last.average_correct_seconds)} {t('per correct answer')}",
                 )
             )

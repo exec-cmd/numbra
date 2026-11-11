@@ -81,3 +81,18 @@ def test_cli_results_remains_english(monkeypatch) -> None:
     assert result.exit_code == 0
     assert "No completed challenges" in result.stdout
     assert current_language() == "en"
+
+
+def test_russian_catalog_covers_static_texts() -> None:
+    # Settings help lines, metric help and trick rules are only shown for the focused row,
+    # so the screen walk in test_tui_i18n cannot reach all of them.
+    from numbra.core.report import AREA_NAMES, METRIC_HELP, RECOMMENDATION_TEXT
+    from numbra.core.tricks import TRICKS
+    from numbra.locale_ru import MESSAGES
+    from numbra.tui.settings import _LABELS
+
+    needed = {text for row in _LABELS.values() for text in row}
+    needed |= {*METRIC_HELP, *METRIC_HELP.values(), *AREA_NAMES.values()}
+    needed |= set(RECOMMENDATION_TEXT.values())
+    needed |= {trick.rule for trick in TRICKS} | {f"trick|{trick.id}" for trick in TRICKS}
+    assert sorted(needed - set(MESSAGES)) == []

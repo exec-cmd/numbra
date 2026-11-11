@@ -30,7 +30,7 @@ from ..config import (
 )
 from ..core.report import area_name
 from ..core.stats import Stats
-from ..i18n import current_language, resolve_language, set_language, t
+from ..i18n import resolve_language, set_language, t, tn
 from .funbox import FunboxSetupScreen
 from .results import ResultsScreen
 from .settings import SettingsScreen
@@ -149,21 +149,19 @@ class MenuScreen(Screen[None]):
             if days_ago == 0
             else t("yesterday")
             if days_ago == 1
-            else (
-                f"{days(days_ago)} {t('ago')}"
-                if current_language() == "en"
-                else f"{days(days_ago)} назад"
-            )
+            else tn(days_ago, "{n} day ago", "{n} days ago").format(n=days_ago)
         )
         last_value = Text.assemble(
             grade_text(last.score_percent), f" {percent(last.score_percent)}, {when}"
         )
         table = Table.grid(padding=(0, 3))
-        table.add_row(t("Streak"), f"{days(current)} ({t('Best').lower()} {longest})")
+        table.add_row(
+            t("Streak"), t("{days} (best {best})").format(days=days(current), best=longest)
+        )
         table.add_row(t("Last"), last_value)
         weak = stats.weak_spots(limit=1)
         if weak:
-            table.add_row(t("Practise next"), t(area_name(weak[0].name)))
+            table.add_row(t("Practise"), t(area_name(weak[0].name)))
         self._stats_block = table
 
     def _update_about(self, index: int) -> None:

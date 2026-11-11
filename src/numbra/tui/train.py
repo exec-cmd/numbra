@@ -126,7 +126,9 @@ class TrainSetupScreen(Screen[None]):
         try:
             self._settings = self._numbra().load_settings()
         except ConfigError as exc:
-            yield Static(Text(f"Configuration error: {exc}", style="bold red"))
+            yield Static(
+                Text(t("Configuration error: {error}").format(error=exc), style="bold red")
+            )
             yield Footer()
             return
         challenge = self._settings.challenge
@@ -191,7 +193,7 @@ class TrainSetupScreen(Screen[None]):
         else:
             strict = self.query_one("#strict", Checkbox).value
             difficulty = self.query_one("#difficulty", Select).value
-            value = f"{t('{minutes} min').format(minutes=minutes)}, {tn(stages, '{n} stage', '{n} stages').format(n=stages)}, {t('strict' if strict else 'soft')} {t('timing')}, {t(str(difficulty), 'difficulty')}"
+            value = f"{t('{minutes} min').format(minutes=minutes)}, {tn(stages, '{n} stage', '{n} stages').format(n=stages)}, {t('strict timing' if strict else 'soft timing')}, {t(str(difficulty), 'difficulty')}"
         self.query_one("#summary", Static).update(value)
 
     @on(Button.Pressed, "#start")
@@ -395,7 +397,9 @@ class TrainingScreen(Screen[None]):
         remaining = limit - elapsed
         self.query_one("#timer", ProgressBar).update(total=limit, progress=max(0.0, remaining))
         self.query_one("#clock", Static).update(
-            f"{remaining:.1f} s" if remaining >= 0 else f"+{-remaining:.1f} s {t('over')}"
+            f"{remaining:.1f} s"
+            if remaining >= 0
+            else t("+{seconds} s over").format(seconds=f"{-remaining:.1f}")
         )
         self.query_one("#card", Vertical).set_class(remaining < 0.3 * limit, "-low")
 
@@ -411,11 +415,16 @@ class TrainingScreen(Screen[None]):
         attempt = self.session.submit(stage_number, problem_number, answer, elapsed, timed_out)
         expected = format_answer(self.session.stages[stage_number].problems[problem_number].answer)
         if attempt.timed_out:
-            message = Text.assemble((t("Time's up"), "bold yellow"), f"  {t('Answer')}: {expected}")
+            message = Text.assemble(
+                (t("Time's up"), "bold yellow"), "  " + t("answer {answer}").format(answer=expected)
+            )
         elif attempt.is_correct:
             message = Text.assemble((f"✓ {t('Correct')}", "bold green"), f"  +{attempt.score:.2f}")
         else:
-            message = Text.assemble((f"✗ {t('Wrong')}", "bold red"), f"  {t('Answer')}: {expected}")
+            message = Text.assemble(
+                (f"✗ {t('Incorrect')}", "bold red"),
+                "  " + t("answer {answer}").format(answer=expected),
+            )
         if attempt.is_correct:
             self._correct += 1
         else:
@@ -431,7 +440,7 @@ class TrainingScreen(Screen[None]):
         cooldown = self.session.cooldown_seconds
         self.query_one("#feedback", Static).update(message)
         self.query_one("#next", Static).update(
-            Text(t("Next in {seconds}s").format(seconds=f"{cooldown:g}"), style="dim")
+            Text(t("Next in {seconds} s").format(seconds=f"{cooldown:g}"), style="dim")
         )
         self.run_worker(self._advance(), exclusive=True)
 

@@ -58,7 +58,7 @@ class TricksScreen(Screen[None]):
                 (trick.example, "dim"),
                 "\n",
                 (
-                    f"{t('Levels')}: {', '.join(level.value for level in trick_levels().get(trick.id, ()))}",
+                    f"{t('Levels')}: {', '.join(t(level.value, 'difficulty') for level in trick_levels().get(trick.id, ()))}",
                     "dim",
                 ),
             )

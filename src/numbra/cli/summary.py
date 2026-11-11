@@ -116,7 +116,9 @@ def summary_card(completed: CompletedTraining, report: TrainingReport) -> Render
         )
     parts.append(
         Text(
-            f"{t('Streak')}: {_days(report.current_streak)} ({t('Best').lower()} {report.longest_streak})"
+            t("Streak: {days} (best {best})").format(
+                days=_days(report.current_streak), best=report.longest_streak
+            )
         )
     )
     if report.recommendation is not None:

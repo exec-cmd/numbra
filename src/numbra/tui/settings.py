@@ -93,7 +93,7 @@ _LABELS: dict[str, tuple[str, str, str]] = {
         f"difficulties.{level}.{field}": (
             f"Difficulty: {level}",
             label,
-            f"{help_text} used to build examples at this level.",
+            f"{help_text} at this level.",
         )
         for level in ("easy", "normal", "hard")
         for field, label, help_text in (
