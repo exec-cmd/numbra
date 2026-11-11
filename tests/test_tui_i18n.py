@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import replace
 
 from test_tui import FakeClock, make_app, make_settings, plain_text, save_completed_session
-from textual.widgets import Button, Checkbox, DataTable, Static, TabbedContent
+from textual.widgets import Button, Checkbox, ContentSwitcher, DataTable, Static, TabbedContent
 
 from numbra.config import ConfigPaths
 from numbra.i18n import MISSES
@@ -33,13 +33,14 @@ def test_tui_screens_render_in_russian(tmp_path) -> None:
             await pilot.press("enter")
             await pilot.pause()
             assert isinstance(app.screen, TrainSetupScreen)
+            setup = app.screen
+            for step in ("step-start", "step-level", "step-practise", "step-time", "step-review"):
+                setup.query_one("#steps", ContentSwitcher).current = step
+                await pilot.pause()
             app.screen.query_one("#strict", Checkbox).value = True
             await pilot.pause()
-            assert plain_text(app.screen.query_one("#summary", Static)).startswith(
-                "1 мин, 1 этап, строгий режим"
-            )
-            app.screen.query_one("#start", Button).focus()
-            await pilot.press("enter")
+            assert "1 мин" in plain_text(app.screen.query_one("#summary", Static))
+            await pilot.press("ctrl+s")
             await pilot.pause()
             assert isinstance(app.screen, TrainingScreen)
             training = app.screen
@@ -70,8 +71,21 @@ def test_tui_screens_render_in_russian(tmp_path) -> None:
             ):
                 app.push_screen(screen)
                 await pilot.pause()
-                if isinstance(screen, TrainSetupScreen):
+                if type(screen) is TrainSetupScreen:
                     assert screen.query_one("#start", Button).region.bottom <= 23
+                    for step in (
+                        "step-start",
+                        "step-level",
+                        "step-practise",
+                        "step-time",
+                        "step-review",
+                    ):
+                        screen.query_one("#steps", ContentSwitcher).current = step
+                        await pilot.pause()
+                if isinstance(screen, FunboxSetupScreen):
+                    for step in ("step-level", "step-practise", "step-time", "step-review"):
+                        screen.query_one("#steps", ContentSwitcher).current = step
+                        await pilot.pause()
                 if isinstance(screen, TricksScreen):
                     assert "Умножьте" in str(screen.query_one("#rule", Static).render())
                 if isinstance(screen, ResultsScreen):

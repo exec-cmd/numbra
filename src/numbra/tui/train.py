@@ -2,31 +2,35 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, cast
 
+from rich.table import Table
 from rich.text import Text
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
+from textual.containers import Center, Horizontal, Vertical, VerticalScroll
 from textual.content import Content
 from textual.screen import Screen
 from textual.timer import Timer
 from textual.widgets import (
     Button,
     Checkbox,
+    ContentSwitcher,
     Footer,
     Header,
     Input,
     Label,
+    OptionList,
     ProgressBar,
-    Select,
+    SelectionList,
     Static,
 )
+from textual.widgets.option_list import Option
 
 from ..cli.summary import summary_card
-from ..config import ConfigError, Settings
+from ..config import ConfigError, DifficultyConfig, Settings
 from ..core.challenge import (
     Challenge,
     ChallengeOptions,
@@ -43,7 +47,7 @@ from ..core.models import (
 from ..core.report import OPERATION_SYMBOLS, TrainingReport, area_name, build_report
 from ..core.stats import Stats, TrainingRecord
 from ..i18n import t, tn
-from .style import display_expression, translate_bindings
+from .style import display_expression, setup_text, translate_bindings
 
 if TYPE_CHECKING:
     from .app import NumbraApp
@@ -72,6 +76,10 @@ class Tick(Checkbox):
         return Content.assemble((mark, self.get_visual_style("toggle--button")))
 
 
+class ChoiceList(SelectionList[str]):
+    BINDINGS = [Binding("enter", "screen.next_step", "Next", show=False)]
+
+
 def _whole(text: str, label: str, minimum: int | None = None) -> int:
     try:
         value = int(text)
@@ -83,33 +91,49 @@ def _whole(text: str, label: str, minimum: int | None = None) -> int:
 
 
 class TrainSetupScreen(Screen[None]):
-    """Form for one training; Start replaces this screen with the run."""
+    """Preset and step wizard for one training."""
 
-    BINDINGS = [Binding("escape", "back", "Back"), Binding("ctrl+s", "start", "Start")]
+    BINDINGS = [
+        Binding("escape", "back", "Back"),
+        Binding("ctrl+s", "start", "Start"),
+        Binding("1", "edit_step(1)", "Edit level", show=False),
+        Binding("2", "edit_step(2)", "Edit practise", show=False),
+        Binding("3", "edit_step(3)", "Edit time", show=False),
+        Binding("4", "edit_step(4)", "Edit start", show=False),
+    ]
     SUB_TITLE = "New training"
-    CHOICES_LABEL = "Operations and topics"
+    HAS_START_STEP = True
+    CHOICE_STEP_LABEL = "Practise"
+    STEP_IDS = ("step-start", "step-level", "step-practise", "step-time", "step-review")
+    STEP_LABELS = ("Start", "Level", "Practise", "Time", "Review")
     DEFAULT_CSS = """
-    TrainSetupScreen VerticalScroll { padding: 1 2; }
+    TrainSetupScreen #wizard { align: center middle; height: 1fr; }
+    TrainSetupScreen #steps { width: 100%; max-width: 72; height: auto; }
+    TrainSetupScreen .step { width: 100%; height: auto; }
+    TrainSetupScreen #stepbar { width: 100%; max-width: 72; height: 1; margin: 0 0 1 0; text-align: center; }
+    TrainSetupScreen .section { border: round $panel-lighten-2; height: auto; padding: 0 1; }
+    TrainSetupScreen #presets { height: auto; max-height: 7; border: none; padding: 0; }
+    TrainSetupScreen #presets .option-list--option { height: 1; }
+    TrainSetupScreen #presets .option-list--option-highlighted { color: $accent; }
+    TrainSetupScreen #difficulty { height: auto; border: none; padding: 0; }
+    TrainSetupScreen #difficulty .option-list--option { height: 2; }
+    TrainSetupScreen #difficulty .option-list--option-highlighted { color: $accent; }
+    TrainSetupScreen #choices { height: auto; max-height: 10; }
     TrainSetupScreen .row { height: 1; }
     TrainSetupScreen .row Label { width: 11; height: 1; content-align: left middle; }
     TrainSetupScreen .row .after { width: auto; margin-left: 3; padding-right: 1; }
-    TrainSetupScreen #difficulty { width: 16; }
     TrainSetupScreen #duration, TrainSetupScreen #stages { width: 7; }
     TrainSetupScreen #seed { width: 16; }
-    TrainSetupScreen Input, TrainSetupScreen SelectCurrent { background: $foreground 8%; }
-    TrainSetupScreen Input:focus, TrainSetupScreen Select:focus > SelectCurrent {
-        background: $foreground 16%;
-    }
+    TrainSetupScreen Input { background: $foreground 8%; }
+    TrainSetupScreen Input:focus { background: $foreground 16%; }
     TrainSetupScreen #strict { margin-left: 3; }
     TrainSetupScreen Checkbox, TrainSetupScreen Checkbox:focus { border: none; }
-    TrainSetupScreen .section {
-        border: round $panel-lighten-2; height: auto; padding: 0 1; margin-bottom: 1;
-    }
-    TrainSetupScreen #choices {
-        grid-size: 3; height: auto;
-    }
-    TrainSetupScreen #summary { color: $text-muted; height: 1; }
+    TrainSetupScreen .hint { color: $text-muted; height: 1; margin-top: 1; text-align: center; }
+    TrainSetupScreen #summary { height: auto; }
     TrainSetupScreen #error { color: $error; height: auto; }
+    TrainSetupScreen .step-error { color: $error; height: 1; }
+    TrainSetupScreen #start-row { height: auto; }
+    TrainSetupScreen #start { margin-top: 1; }
     """
 
     def __init__(self) -> None:
@@ -118,7 +142,11 @@ class TrainSetupScreen(Screen[None]):
         if self.TITLE:
             self.title = t(self.TITLE)
         self._settings: Settings | None = None
-        self._boxes: dict[str, Checkbox] = {}
+        self._choices: ChoiceList | None = None
+        self._presets: dict[str, dict[str, Any]] = {}
+        self._path: list[str] = []
+        self._step_ids = self.STEP_IDS if self.HAS_START_STEP else self.STEP_IDS[1:]
+        self._step_labels = self.STEP_LABELS if self.HAS_START_STEP else self.STEP_LABELS[1:]
         translate_bindings(self)
 
     def compose(self) -> ComposeResult:
@@ -132,69 +160,173 @@ class TrainSetupScreen(Screen[None]):
             yield Footer()
             return
         challenge = self._settings.challenge
-        with VerticalScroll():
-            with Vertical(id="session", classes="section") as session:
-                session.border_title = t("Session")
-                with Horizontal(classes="row"):
-                    yield Label(t("Difficulty"))
-                    yield Select(
-                        [(t(level.value, "difficulty"), level) for level in Difficulty],
-                        value=challenge.difficulty,
-                        allow_blank=False,
-                        compact=True,
-                        id="difficulty",
-                    )
-                    yield Label(t("Minutes"), classes="after")
-                    yield Input(str(challenge.duration_minutes), compact=True, id="duration")
-                    yield Label(t("Stages"), classes="after")
-                    yield Input(str(challenge.stages), compact=True, id="stages")
-                with Horizontal(classes="row"):
-                    yield Label(t("Seed"))
-                    yield Input(
-                        "" if challenge.seed is None else str(challenge.seed),
-                        placeholder=t("random"),
-                        compact=True,
-                        id="seed",
-                    )
-                with Horizontal(classes="row"):
-                    yield Tick(
-                        t("strict: an example ends at its time limit"), compact=True, id="strict"
-                    )
-            with Vertical(id="practise", classes="section") as practise:
-                practise.border_title = t(self.CHOICES_LABEL)
-                with Grid(id="choices"):
-                    yield from self._choices(self._settings)
-            yield Static("", id="error")
-            yield Static(id="summary")
-            yield Button(t("Start"), variant="primary", id="start")
+        with Center(id="wizard"):
+            yield Static(id="stepbar")
+            with ContentSwitcher(id="steps", initial=self._step_ids[0]):
+                if self.HAS_START_STEP:
+                    with Vertical(id="step-start", classes="step"):
+                        with Vertical(classes="section") as presets_box:
+                            presets_box.border_title = t("Start", "step")
+                            yield self._preset_list(self._settings)
+                        yield Static(t("Enter picks, Esc returns to the menu"), classes="hint")
+                with Vertical(id="step-level", classes="step"):
+                    yield self._difficulty_list(challenge.difficulty, challenge.profiles)
+                    yield Static("", classes="step-error", id="level-error")
+                with Vertical(id="step-practise", classes="step"):
+                    with Vertical(classes="section") as practise:
+                        practise.border_title = t(self.CHOICE_STEP_LABEL)
+                        self._choices = self._choice_list(self._settings)
+                        yield self._choices
+                    yield Static("", classes="step-error", id="practise-error")
+                with Vertical(id="step-time", classes="step"):
+                    with Vertical(classes="section") as session:
+                        session.border_title = t("Time")
+                        with Horizontal(classes="row"):
+                            yield Label(t("Minutes"))
+                            yield Input(
+                                str(challenge.duration_minutes), compact=True, id="duration"
+                            )
+                            yield Label(t("Stages"), classes="after")
+                            yield Input(str(challenge.stages), compact=True, id="stages")
+                        with Horizontal(classes="row"):
+                            yield Label(t("Seed"))
+                            yield Input(
+                                "" if challenge.seed is None else str(challenge.seed),
+                                placeholder=t("random"),
+                                compact=True,
+                                id="seed",
+                            )
+                        yield Tick(
+                            t("strict: an example ends at its time limit"),
+                            compact=True,
+                            id="strict",
+                        )
+                    yield Static("", classes="step-error", id="time-error")
+                with Vertical(id="step-review", classes="step"):
+                    with Vertical(classes="section") as review:
+                        review.border_title = t("Review")
+                        yield Static(id="summary")
+                    yield Static("", id="error")
+                    with Center(id="start-row"):
+                        yield Button(t("Start"), variant="primary", id="start")
+                    yield Static(t("Enter starts, 1–4 edit a step, Esc goes back"), classes="hint")
         yield Footer()
 
-    def action_back(self) -> None:
-        self.app.pop_screen()
-
     def on_mount(self) -> None:
+        if not self.query("#steps"):
+            return
+        self._path = [self._step_ids[0]]
+        self._update_stepbar()
         self._update_summary()
+        self._focus_step(self._step_ids[0])
+
+    def action_back(self) -> None:
+        if len(self._path) > 1:
+            self._path.pop()
+            self._show_step(self._path[-1], push=False)
+        else:
+            self.app.pop_screen()
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action.startswith("edit_step"):
+            return (
+                bool(self.query("#steps"))
+                and self.query_one("#steps", ContentSwitcher).current == "step-review"
+            )
+        return True
+
+    def action_edit_step(self, number: int) -> None:
+        target = {1: "step-level", 2: "step-practise", 3: "step-time", 4: "step-start"}
+        step = target.get(number, "step-level")
+        if step in self._step_ids:
+            self._show_step(step)
+
+    def action_next_step(self) -> None:
+        current = self.query_one("#steps", ContentSwitcher).current
+        if current in self._step_ids:
+            index = self._step_ids.index(current)
+            if index < len(self._step_ids) - 1:
+                self._show_step(self._step_ids[index + 1])
+
+    def _show_step(self, step: str, *, push: bool = True) -> None:
+        switcher = self.query_one("#steps", ContentSwitcher)
+        if push and (not self._path or self._path[-1] != step):
+            self._path.append(step)
+        switcher.current = step
+        self._update_stepbar()
+        self._focus_step(step)
+
+    def _focus_step(self, step: str) -> None:
+        target = {
+            "step-start": "#presets",
+            "step-level": "#difficulty",
+            "step-practise": "#choices",
+            "step-time": "#duration",
+            "step-review": "#start",
+        }[step]
+        self.query_one(target).focus()
+
+    def _update_stepbar(self) -> None:
+        switcher = self.query_one("#steps", ContentSwitcher)
+        current = switcher.current or self._step_ids[0]
+        current_index = self._step_ids.index(current)
+        value = Text()
+        for index, label in enumerate(self._step_labels):
+            if index:
+                value.append(" › ", style="dim")
+            value.append(
+                t(label, "step"),
+                style="bold cyan"
+                if index == current_index
+                else "dim"
+                if index > current_index
+                else "",
+            )
+        self.query_one("#stepbar", Static).update(value)
 
     @on(Input.Changed)
-    @on(Select.Changed)
     @on(Checkbox.Changed)
+    @on(ChoiceList.SelectedChanged)
     def _form_changed(self, event: object) -> None:
         del event
         self._update_summary()
+
+    @on(Input.Submitted)
+    def _input_submitted(self, event: Input.Submitted) -> None:
+        del event
+        self.action_next_step()
+
+    @on(OptionList.OptionSelected)
+    def _option_selected(self, event: OptionList.OptionSelected) -> None:
+        if event.option_list.id == "presets":
+            self._apply_preset(event.option.id or "")
+        elif event.option_list.id == "difficulty":
+            self._show_step("step-practise")
 
     def _update_summary(self) -> None:
         if not self.query("#summary"):
             return
         try:
-            minutes = _whole(self.query_one("#duration", Input).value, "Minutes", 1)
+            minutes = _whole(self.query_one("#duration", Input).value, "Duration", 1)
             stages = _whole(self.query_one("#stages", Input).value, "Stages", 1)
+            difficulty = self._difficulty()
+            tokens = self._choices_tokens()
+            detail = self._practice_summary(tokens, difficulty)
+            table = Table.grid(padding=(0, 2))
+            table.add_column(style="bold")
+            table.add_column()
+            table.add_row(t("Level", "step"), t(difficulty.value, "difficulty"))
+            table.add_row(t(self.CHOICE_STEP_LABEL, "step"), detail)
+            table.add_row(
+                t("Time", "step"),
+                f"{t('{minutes} min').format(minutes=minutes)}, {tn(stages, '{n} stage', '{n} stages').format(n=stages)}, {t('strict timing' if self.query_one('#strict', Checkbox).value else 'soft timing')}",
+            )
+            seed = self.query_one("#seed", Input).value.strip() or t("random")
+            table.add_row(t("Seed"), seed)
         except ValueError:
-            value = t("Check minutes and stages")
-        else:
-            strict = self.query_one("#strict", Checkbox).value
-            difficulty = self.query_one("#difficulty", Select).value
-            value = f"{t('{minutes} min').format(minutes=minutes)}, {tn(stages, '{n} stage', '{n} stages').format(n=stages)}, {t('strict timing' if strict else 'soft timing')}, {t(str(difficulty), 'difficulty')}"
-        self.query_one("#summary", Static).update(value)
+            table = Table.grid()
+            table.add_row(t("Check minutes and stages"))
+        self.query_one("#summary", Static).update(table)
 
     @on(Button.Pressed, "#start")
     def start(self) -> None:
@@ -206,6 +338,14 @@ class TrainSetupScreen(Screen[None]):
             session = Challenge(settings, clock=clock).create_session(options)
         except (ConfigError, ValueError) as exc:  # GenerationError is a ValueError
             self.query_one("#error", Static).update(Text(str(exc), style="bold red"))
+            target = (
+                "step-practise"
+                if "operation list" in str(exc) or "funbox mode" in str(exc)
+                else "step-time"
+            )
+            field = "practise-error" if target == "step-practise" else "time-error"
+            self.query_one(f"#{field}", Static).update(str(exc))
+            self._show_step(target)
             return
         warnings = (*settings.warnings, *session.warnings)
 
@@ -217,8 +357,8 @@ class TrainSetupScreen(Screen[None]):
     def action_start(self) -> None:
         self.start()
 
-    def _choices(self, settings: Settings) -> ComposeResult:
-        """Operation and topic checkboxes; the funbox setup yields its own."""
+    def _choice_list(self, settings: Settings) -> ChoiceList:
+        selections = []
         for token in _TOKENS:
             label = (
                 f"{OPERATION_SYMBOLS[token]} {t(area_name(token))}"
@@ -227,19 +367,186 @@ class TrainSetupScreen(Screen[None]):
                 if token in {"sqrt", "trig", "log"}
                 else t(token)
             )
-            box = Tick(label, value=_enabled_by_default(token, settings), compact=True)
-            self._boxes[token] = box
-            yield box
+            selections.append((label, token, _enabled_by_default(token, settings)))
+        return ChoiceList(*selections, compact=True, id="choices")
+
+    def _difficulty_list(
+        self, difficulty: Difficulty, profiles: Mapping[Difficulty, DifficultyConfig]
+    ) -> OptionList:
+        options = []
+        for level in Difficulty:
+            prompt = Text(t(level.value, "difficulty"), style="bold")
+            profile = profiles[level]
+            terms = (
+                str(profile.min_terms)
+                if profile.min_terms == profile.max_terms
+                else f"{profile.min_terms}–{profile.max_terms}"
+            )
+            description = t("{terms} numbers, values up to {limit}").format(
+                terms=terms, limit=profile.max_value
+            )
+            prompt.append("\n" + description, style="dim")
+            options.append(Option(prompt, id=level.value))
+        result = OptionList(*options, id="difficulty")
+        result.highlighted = list(Difficulty).index(difficulty)
+        return result
+
+    def _difficulty(self) -> Difficulty:
+        option = self.query_one("#difficulty", OptionList).get_option_at_index(
+            self.query_one("#difficulty", OptionList).highlighted or 0
+        )
+        return Difficulty(option.id or Difficulty.NORMAL)
+
+    def _choices_tokens(self) -> list[str]:
+        return list(self.query_one("#choices", ChoiceList).selected)
+
+    @staticmethod
+    def _split_tokens(tokens: Sequence[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        return (
+            tuple(token for token in tokens if token in {"+", "-", "*", "/", "^"}),
+            tuple(token for token in tokens if token not in {"+", "-", "*", "/", "^"}),
+        )
+
+    def _practice_summary(self, tokens: Sequence[str], difficulty: Difficulty) -> str:
+        operations, topics = self._split_tokens(tokens)
+        detail = setup_text(
+            difficulty.value, self.query_one("#strict", Checkbox).value, operations, topics
+        )
+        return detail.split(": ", 1)[-1] if ": " in detail else t("Choose at least one")
 
     def _chosen(self) -> dict[str, Any]:
         """ChallengeOptions fields set by the checkboxes; raises ValueError for an empty choice."""
-        tokens = [
-            token for token, box in self._boxes.items() if token != "identities" and box.value
-        ]
+        tokens = [token for token in self._choices_tokens() if token != "identities"]
         return {
             "operations": parse_operation_selection(tokens),
-            "identities": self._boxes["identities"].value,
+            "identities": "identities" in self._choices_tokens(),
         }
+
+    def _settings_tokens(self) -> list[str]:
+        assert self._settings is not None
+        return [token for token in _TOKENS if _enabled_by_default(token, self._settings)]
+
+    def _preset_list(self, settings: Settings) -> OptionList:
+        self._presets = {}
+        rows: list[tuple[str, str, dict[str, Any]]] = []
+        record = Stats(self._numbra().database_path).history(1)
+        if record:
+            try:
+                difficulty = Difficulty(record[0].difficulty)
+            except ValueError:
+                pass
+            else:
+                saved = record[0]
+                tokens = list(
+                    dict.fromkeys(
+                        [token for token in saved.operations if token in _TOKENS]
+                        + [
+                            "^" if token == "power" else token
+                            for token in saved.topics
+                            if token in _TOKENS or token == "power"
+                        ]
+                    )
+                )
+                rows.append(
+                    (
+                        "repeat",
+                        "Repeat last",
+                        {
+                            "difficulty": difficulty,
+                            "tokens": tokens,
+                            "strict": saved.strict,
+                            "minutes": max(1, round(saved.target_duration_seconds / 60)),
+                            "stages": saved.stages,
+                            "seed": "",
+                        },
+                    )
+                )
+        for spot in Stats(self._numbra().database_path).weak_spots(limit=5):
+            token = "^" if spot.name == "power" else spot.name
+            if spot.kind in {"operation", "topic"} and token in _TOKENS:
+                name = OPERATION_SYMBOLS.get(token, t(area_name(spot.name)))
+                rows.append(
+                    (
+                        "weak",
+                        t("Weak spot: {name}").format(name=name),
+                        {
+                            "difficulty": settings.challenge.difficulty,
+                            "tokens": [token],
+                            "strict": False,
+                            "minutes": settings.challenge.duration_minutes,
+                            "stages": settings.challenge.stages,
+                            "seed": "",
+                        },
+                    )
+                )
+                break
+        rows.extend(
+            (
+                (
+                    "quick",
+                    "Quick",
+                    {
+                        "difficulty": settings.challenge.difficulty,
+                        "tokens": self._settings_tokens(),
+                        "strict": False,
+                        "minutes": 2,
+                        "stages": settings.challenge.stages,
+                        "seed": "",
+                    },
+                ),
+                (
+                    "settings",
+                    "From settings",
+                    {
+                        "difficulty": settings.challenge.difficulty,
+                        "tokens": self._settings_tokens(),
+                        "strict": False,
+                        "minutes": settings.challenge.duration_minutes,
+                        "stages": settings.challenge.stages,
+                        "seed": "",
+                    },
+                ),
+                ("custom", "Custom…", {}),
+            )
+        )
+        options = []
+        names = [name if identifier == "weak" else t(name) for identifier, name, _ in rows]
+        name_width = max(len(name) for name in names)
+        for (identifier, _, values), shown in zip(rows, names, strict=True):
+            self._presets[identifier] = values
+            table = Table.grid(padding=(0, 2))
+            table.add_column(width=name_width, no_wrap=True)
+            table.add_column()
+            if identifier == "custom":
+                description = t("choose every option")
+            else:
+                ops, topics = self._split_tokens(values["tokens"])
+                setup = setup_text(values["difficulty"].value, values["strict"], ops, topics)
+                description = f"{setup}, {t('{minutes} min').format(minutes=values['minutes'])}, {tn(values['stages'], '{n} stage', '{n} stages').format(n=values['stages'])}"
+            table.add_row(
+                Text(shown, style="bold"),
+                Text(description, style="dim"),
+            )
+            options.append(Option(table, id=identifier))
+        return OptionList(*options, id="presets")
+
+    def _apply_preset(self, identifier: str) -> None:
+        if identifier == "custom":
+            self._show_step("step-level")
+            return
+        values = self._presets[identifier]
+        self.query_one("#duration", Input).value = str(values["minutes"])
+        self.query_one("#stages", Input).value = str(values["stages"])
+        self.query_one("#seed", Input).value = values["seed"]
+        self.query_one("#strict", Checkbox).value = values["strict"]
+        self.query_one("#choices", ChoiceList).deselect_all()
+        for token in values["tokens"]:
+            if token in _TOKENS:
+                self.query_one("#choices", ChoiceList).select(token)
+        levels = self.query_one("#difficulty", OptionList)
+        levels.highlighted = list(Difficulty).index(values["difficulty"])
+        self._update_summary()
+        self._show_step("step-review")
 
     def _options(self) -> ChallengeOptions:
         if self._settings is None:
@@ -248,7 +555,7 @@ class TrainSetupScreen(Screen[None]):
         return ChallengeOptions(
             duration_minutes=_whole(self.query_one("#duration", Input).value, "Duration", 1),
             stages=_whole(self.query_one("#stages", Input).value, "Stages", 1),
-            difficulty=cast(Difficulty, self.query_one("#difficulty", Select).value),
+            difficulty=self._difficulty(),
             seed=_whole(seed_text, "Seed") if seed_text else None,
             strict=self.query_one("#strict", Checkbox).value,
             **self._chosen(),

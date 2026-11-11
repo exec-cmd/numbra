@@ -14,12 +14,13 @@ from test_tui import (
     start_training,
     wait_until,
 )
-from textual.widgets import Button, Checkbox, Input, ProgressBar, Static
+from textual.widgets import Button, Checkbox, Input, ProgressBar, SelectionList, Static
 
 from numbra.core.challenge import Challenge, ChallengeOptions, TrainingSession
 from numbra.core.funbox import FunboxMode
 from numbra.core.models import Difficulty, Operation, format_answer
 from numbra.core.report import build_report
+from numbra.tui.app import MenuScreen
 from numbra.tui.funbox import FunboxSetupScreen
 from numbra.tui.results import SessionScreen
 from numbra.tui.train import SummaryScreen, TrainingScreen, TrainSetupScreen
@@ -137,15 +138,16 @@ def test_setup_forms_fit_at_80_columns_without_scrolling(tmp_path: Path) -> None
             for screen_type, key in ((TrainSetupScreen, "t"), (FunboxSetupScreen, "f")):
                 screen = app.screen
                 assert isinstance(screen, screen_type)
-                start = screen.query_one("#start", Button)
-                scroll = screen.query_one("VerticalScroll")
-                assert start.region.bottom <= 23
-                assert scroll.max_scroll_y == 0
+                screen._show_step("step-review")
+                assert screen.query_one("#start", Button).region.bottom <= 23
                 if key == "t":
                     await pilot.press("escape")
+                    await pilot.press("escape")
+                    await wait_until(pilot, lambda: isinstance(app.screen, MenuScreen))
                     await pilot.press("f")
                     await wait_until(pilot, lambda: isinstance(app.screen, FunboxSetupScreen))
                 else:
+                    await pilot.press("escape")
                     await pilot.press("escape")
 
     asyncio.run(scenario())
@@ -189,13 +191,16 @@ def test_setup_summary_checkbox_label_and_ctrl_s(tmp_path: Path) -> None:
             await pilot.press("enter")
             await wait_until(pilot, lambda: isinstance(app.screen, TrainSetupScreen))
             setup = app.screen
-            assert "multiplication" in str(setup._boxes["*"].label)
+            assert "multiplication" in str(
+                setup.query_one("#choices", SelectionList).get_option_at_index(2).prompt
+            )
             assert str(setup.query_one("#strict", Checkbox).label) == (
                 "strict: an example ends at its time limit"
             )
             setup.query_one("#duration", Input).value = "2"
             await pilot.pause()
-            assert plain_text(setup.query_one("#summary", Static)).startswith("2 min, 1 stage")
+            summary_text = plain_text(setup.query_one("#summary", Static))
+            assert "2 min" in summary_text and "1 stage" in summary_text
             await pilot.press("ctrl+s")
             await wait_until(pilot, lambda: isinstance(app.screen, TrainingScreen))
 

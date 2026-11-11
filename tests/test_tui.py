@@ -8,10 +8,12 @@ import importlib
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import date
+from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from rich.console import Console
 from textual.pilot import Pilot
 from textual.widgets import (
     Button,
@@ -19,7 +21,6 @@ from textual.widgets import (
     DataTable,
     Input,
     OptionList,
-    Select,
     Static,
     TabbedContent,
 )
@@ -98,14 +99,18 @@ async def wait_until(pilot: Pilot[Any], predicate: Callable[[], bool]) -> None:
 
 def plain_text(widget: Static) -> str:
     content = widget.content
-    return getattr(content, "plain", str(content))
+    plain = getattr(content, "plain", None)
+    if plain is not None:
+        return plain
+    buffer = StringIO()
+    Console(file=buffer, width=100).print(content)
+    return buffer.getvalue().strip()
 
 
 async def start_training(pilot: Pilot[Any], app: NumbraApp) -> TrainingScreen:
     await pilot.press("enter")  # Menu: Train
     await wait_until(pilot, lambda: isinstance(app.screen, TrainSetupScreen))
-    app.screen.query_one("#start", Button).focus()
-    await pilot.press("enter")
+    await pilot.press("ctrl+s")
     await wait_until(pilot, lambda: isinstance(app.screen, TrainingScreen))
     screen = app.screen
     assert isinstance(screen, TrainingScreen)
@@ -196,8 +201,7 @@ def test_strict_timeout_is_recorded_and_the_run_completes(tmp_path: Path) -> Non
             await pilot.press("enter")
             await wait_until(pilot, lambda: isinstance(app.screen, TrainSetupScreen))
             app.screen.query_one("#strict", Checkbox).value = True
-            app.screen.query_one("#start", Button).focus()
-            await pilot.press("enter")
+            await pilot.press("ctrl+s")
             await wait_until(pilot, lambda: isinstance(app.screen, TrainingScreen))
             training = app.screen
             assert isinstance(training, TrainingScreen)
@@ -247,8 +251,7 @@ def test_invalid_setup_value_is_shown_inline(tmp_path: Path) -> None:
             await pilot.press("enter")
             await wait_until(pilot, lambda: isinstance(app.screen, TrainSetupScreen))
             app.screen.query_one("#duration", Input).value = "0"
-            app.screen.query_one("#start", Button).focus()
-            await pilot.press("enter")
+            await pilot.press("ctrl+s")
             await pilot.pause()
             assert isinstance(app.screen, TrainSetupScreen)
             assert "at least 1" in plain_text(app.screen.query_one("#error", Static))
@@ -512,7 +515,7 @@ def test_train_setup_reads_the_changed_setting(tmp_path: Path) -> None:
             app.screen.query_one(OptionList).highlighted = 0
             await pilot.press("enter")  # Menu: Train
             await wait_until(pilot, lambda: isinstance(app.screen, TrainSetupScreen))
-            assert app.screen.query_one("#difficulty", Select).value == Difficulty.HARD
+            assert app.screen._difficulty() == Difficulty.HARD
 
     asyncio.run(scenario())
 
@@ -563,9 +566,8 @@ async def open_funbox(pilot: Pilot[Any], app: NumbraApp) -> FunboxSetupScreen:
 
 
 async def start_funbox(pilot: Pilot[Any], app: NumbraApp) -> TrainingScreen:
-    screen = await open_funbox(pilot, app)
-    screen.query_one("#start", Button).focus()
-    await pilot.press("enter")
+    await open_funbox(pilot, app)
+    await pilot.press("ctrl+s")
     await wait_until(pilot, lambda: isinstance(app.screen, TrainingScreen))
     training = app.screen
     assert isinstance(training, TrainingScreen)
@@ -578,11 +580,10 @@ def test_funbox_setup_without_a_mode_shows_the_error(tmp_path: Path) -> None:
         async with app.run_test() as pilot:
             screen = await open_funbox(pilot, app)
             assert screen.title == FUNBOX_TITLE
-            boxes = list(screen.query("#choices Checkbox"))
-            assert len(boxes) == len(FunboxMode)
-            assert not any(box.value for box in boxes)
-            screen.query_one("#start", Button).focus()
-            await pilot.press("enter")
+            choices = screen.query_one("#choices")
+            assert choices.option_count == len(FunboxMode)
+            assert choices.selected == []
+            await pilot.press("ctrl+s")
             await wait_until(
                 pilot, lambda: "funbox mode" in plain_text(screen.query_one("#error", Static))
             )
