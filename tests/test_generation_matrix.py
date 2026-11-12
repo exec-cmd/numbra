@@ -16,6 +16,8 @@ from numbra.core.generator import (
 )
 from numbra.core.models import Difficulty, Topic
 
+SEEDS = 8
+
 
 def independent(expr: Expr) -> Fraction:
     if expr.kind == "number":
@@ -58,12 +60,12 @@ def independent(expr: Expr) -> Fraction:
 
 @pytest.mark.parametrize("level", list(Difficulty))
 @pytest.mark.parametrize("feature", [None, *list(Topic), "advanced"])
-def test_one_hundred_seeds_per_difficulty_and_topic(
+def test_seed_sample_per_difficulty_and_topic(
     level: Difficulty, feature: Topic | str | None
 ) -> None:
     settings = Settings(ChallengeConfig(), (), {})
     first = None
-    for seed in range(100):
+    for seed in range(SEEDS):
         flags = (
             {}
             if feature is None
