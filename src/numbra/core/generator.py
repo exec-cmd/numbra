@@ -9,6 +9,7 @@ from typing import Final
 from .catalog import build_arithmetic, problem, topic_catalog
 from .expressions import Expr, canonical_key, solution_steps, work_units
 from .models import BASIC_OPERATIONS, Difficulty, Operation, Problem, Topic
+from .permutation import permute_operands
 from .tricks import trick_catalog
 
 
@@ -121,6 +122,7 @@ class ProblemGenerator:
         )
         self.topics = tuple(dict.fromkeys(Topic(topic) for topic in topics))
         self._random = random.Random(seed)
+        self._forms = random.Random(f"{seed}:forms")
         self._seen: set[tuple[object, ...]] = set()
         self._last: tuple[object, ...] | None = None
         self.warnings: list[str] = []
@@ -156,6 +158,17 @@ class ProblemGenerator:
                 }
             )
         )
+
+    def _apply_forms(self, p: Problem) -> Problem:
+        if p.tree is not None:
+            tree = permute_operands(p.as_tree(), self._forms)
+            p = replace(
+                p,
+                tree=tree,
+                expression=tree.render(),
+                solution_steps=solution_steps(tree),
+            )
+        return p
 
     def _next_level(self) -> int:
         """Spread work units evenly: each band level once per shuffled cycle."""
@@ -270,7 +283,9 @@ class ProblemGenerator:
             self._operation_counts.update(candidate.operations)
             self._operand_counts.update(_large_numbers(candidate))
             self._topic_counts["arithmetic"] += 1
-            return replace(candidate, solution_steps=solution_steps(candidate.as_tree()))
+            return self._apply_forms(
+                replace(candidate, solution_steps=solution_steps(candidate.as_tree()))
+            )
         if self._arithmetic_candidates:
             warning = (
                 "Selected settings require repeated arithmetic exercises; unique catalog exhausted."
@@ -289,7 +304,9 @@ class ProblemGenerator:
             self._operation_counts.update(candidate.operations)
             self._operand_counts.update(_large_numbers(candidate))
             self._topic_counts["arithmetic"] += 1
-            return replace(candidate, solution_steps=solution_steps(candidate.as_tree()))
+            return self._apply_forms(
+                replace(candidate, solution_steps=solution_steps(candidate.as_tree()))
+            )
         raise GenerationError(
             "No arithmetic exercises satisfy operand, term, result and effort limits"
         )
@@ -310,7 +327,7 @@ class ProblemGenerator:
                 raise GenerationError("No new exercise satisfies the requested complexity range")
             p = self._random.choice(possible)
             self._seen.add(canonical_problem_key(p))
-            return replace(p, solution_steps=solution_steps(p.as_tree()))
+            return self._apply_forms(replace(p, solution_steps=solution_steps(p.as_tree())))
         return self.generate_many(1)[0]
 
     def _take(self, family: str) -> Problem:
@@ -382,7 +399,7 @@ class ProblemGenerator:
             self._operation_counts.update(p.operations)
         self._operand_counts.update(_large_numbers(p))
         self._topic_counts.update({family: 1})
-        return replace(p, solution_steps=solution_steps(p.as_tree()))
+        return self._apply_forms(replace(p, solution_steps=solution_steps(p.as_tree())))
 
     def generate_many(self, count: int) -> tuple[Problem, ...]:
         if count < 0:
