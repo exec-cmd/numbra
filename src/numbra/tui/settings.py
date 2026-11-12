@@ -61,6 +61,11 @@ _LABELS: dict[str, tuple[str, str, str]] = {
         "How many timed stages a training has; they cycle slow, normal, fast.",
     ),
     "challenge.operations": ("Training", "Operations", "Operations used by default."),
+    "generation.brackets": (
+        "Examples",
+        "Brackets in long examples",
+        "Group long additions and subtractions in brackets",
+    ),
     "features.sqrt": ("Topics", "Square roots", "Include square roots in new trainings."),
     "features.trig": ("Topics", "Trigonometry", "Include trigonometry in new trainings."),
     "features.log": ("Topics", "Logarithms", "Include logarithms in new trainings."),
@@ -233,6 +238,7 @@ class SettingsScreen(Screen[None]):
             grouped.setdefault(_metadata(key)[0], []).append((key, value))
         order = [
             "Training",
+            "Examples",
             "Topics",
             "Funbox",
             "Time limits",

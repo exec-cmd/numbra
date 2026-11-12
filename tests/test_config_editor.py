@@ -32,6 +32,7 @@ def test_list_contains_flattened_defaults(paths: ConfigPaths) -> None:
     assert values["timing.operation_bonus_seconds.*"] == 1
     assert values["stages.fast.limit_seconds"] == 5
     assert values["difficulties.hard.max_value"] == 999
+    assert values["generation.brackets"] is True
     assert "challenge.seed" not in values
 
 
@@ -137,3 +138,13 @@ def test_funbox_modes_are_listed_and_validated_on_write(paths: ConfigPaths) -> N
     with pytest.raises(ConfigError, match=r"funbox\.modes"):
         set_value(paths, "funbox.modes", '["nope"]')
     assert get_value(paths, "funbox.modes") == ["logic"]
+
+
+def test_generation_brackets_round_trip(paths: ConfigPaths) -> None:
+    assert get_value(paths, "generation.brackets") is True
+
+    set_value(paths, "generation.brackets", "false")
+
+    assert get_value(paths, "generation.brackets") is False
+    assert ConfigManager(paths).load_or_create().challenge.brackets is False
+    assert "brackets = false" in paths.main.read_text(encoding="utf-8")

@@ -9,9 +9,93 @@ def test_config_manager_creates_defaults(tmp_path: Path) -> None:
     manager = ConfigManager(ConfigPaths.from_root(tmp_path))
     settings = manager.load_or_create()
     assert settings.challenge.duration_minutes == 6
+    assert settings.challenge.brackets is True
+    assert {
+        level.value: (profile.min_terms, profile.max_terms)
+        for level, profile in settings.challenge.profiles.items()
+    } == {"easy": (2, 3), "normal": (2, 6), "hard": (3, 8)}
     assert settings.language == "auto"
     paths = manager.paths
     assert all(p.exists() for p in (paths.main, paths.templates, paths.design))
+
+
+@pytest.mark.parametrize("value", ["false", "true"])
+def test_generation_brackets_can_be_configured(tmp_path: Path, value: str) -> None:
+    paths = ConfigPaths.from_root(tmp_path)
+    manager = ConfigManager(paths)
+    manager.load_or_create()
+    paths.main.write_text(f"[challenge]\n[generation]\nbrackets = {value}\n", encoding="utf-8")
+
+    assert manager.load_or_create().challenge.brackets is (value == "true")
+
+
+@pytest.mark.parametrize("value", ["1", '"yes"'])
+def test_generation_brackets_rejects_non_boolean(tmp_path: Path, value: str) -> None:
+    paths = ConfigPaths.from_root(tmp_path)
+    manager = ConfigManager(paths)
+    manager.load_or_create()
+    paths.main.write_text(f"[challenge]\n[generation]\nbrackets = {value}\n", encoding="utf-8")
+
+    with pytest.raises(ConfigError, match=r"numbra\.toml: generation\.brackets"):
+        manager.load_or_create()
+
+
+@pytest.mark.parametrize(
+    ("level", "old_pair", "new_pair"),
+    [
+        ("easy", (2, 2), (2, 3)),
+        ("normal", (2, 3), (2, 6)),
+        ("hard", (3, 4), (3, 8)),
+    ],
+)
+def test_old_default_term_pairs_map_without_rewriting(
+    tmp_path: Path, level: str, old_pair: tuple[int, int], new_pair: tuple[int, int]
+) -> None:
+    paths = ConfigPaths.from_root(tmp_path)
+    manager = ConfigManager(paths)
+    manager.load_or_create()
+    original = (
+        f"[challenge]\n[difficulties.{level}]\n"
+        f"min_terms = {old_pair[0]}\nmax_terms = {old_pair[1]}\n"
+    )
+    paths.main.write_text(original, encoding="utf-8")
+
+    profile = manager.load_or_create().challenge.profiles[level]
+
+    assert (profile.min_terms, profile.max_terms) == new_pair
+    assert paths.main.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.parametrize(
+    ("level", "max_terms", "new_pair"),
+    [("easy", 2, (2, 3)), ("normal", 3, (2, 6)), ("hard", 4, (3, 8))],
+)
+def test_partial_old_term_pair_maps_after_fallback(
+    tmp_path: Path, level: str, max_terms: int, new_pair: tuple[int, int]
+) -> None:
+    paths = ConfigPaths.from_root(tmp_path)
+    manager = ConfigManager(paths)
+    manager.load_or_create()
+    paths.main.write_text(
+        f"[challenge]\n[difficulties.{level}]\nmax_terms = {max_terms}\n", encoding="utf-8"
+    )
+
+    profile = manager.load_or_create().challenge.profiles[level]
+
+    assert (profile.min_terms, profile.max_terms) == new_pair
+
+
+def test_custom_term_pair_is_kept(tmp_path: Path) -> None:
+    paths = ConfigPaths.from_root(tmp_path)
+    manager = ConfigManager(paths)
+    manager.load_or_create()
+    paths.main.write_text(
+        "[challenge]\n[difficulties.normal]\nmin_terms = 3\nmax_terms = 4\n", encoding="utf-8"
+    )
+
+    profile = manager.load_or_create().challenge.profiles["normal"]
+
+    assert (profile.min_terms, profile.max_terms) == (3, 4)
 
 
 def test_ui_language_setting_and_validation(tmp_path: Path) -> None:

@@ -69,6 +69,7 @@ class ChallengeConfig:
     )
     features: dict[Topic, bool] = field(default_factory=_default_features)
     funbox_modes: tuple[FunboxMode, ...] = ()
+    brackets: bool = True
 
 
 @dataclass(frozen=True, slots=True)

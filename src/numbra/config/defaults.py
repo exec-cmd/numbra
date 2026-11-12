@@ -50,6 +50,9 @@ min_terms = 3
 max_terms = 8
 max_result = 10000
 
+[generation]
+brackets = true
+
 [ui]
 language = "auto"
 """

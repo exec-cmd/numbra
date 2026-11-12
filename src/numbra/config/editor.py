@@ -11,6 +11,7 @@ from typing import Any
 
 from .defaults import _DEFAULT_TOML
 from .manager import ConfigError, ConfigManager, _parse_settings
+from .models import Settings
 from .paths import ConfigPaths
 
 _DEFAULTS = tomllib.loads(_DEFAULT_TOML)
@@ -47,17 +48,20 @@ def _check_key(key: str) -> None:
         raise ConfigError(f"unknown configuration key: {key}")
 
 
-def _load(paths: ConfigPaths) -> tuple[dict[str, Any], Any, dict[str, Any]]:
+def _load(paths: ConfigPaths) -> tuple[dict[str, Any], Any, dict[str, Any], Settings]:
     main, templates, design = ConfigManager(paths).load_documents()
-    _parse_settings(main, templates, design, paths)
-    return main, templates, design
+    settings = _parse_settings(main, templates, design, paths)
+    return main, templates, design, settings
 
 
 def list_values(paths: ConfigPaths) -> list[tuple[str, object]]:
     """Effective value of every known key. The seed appears only when it is set."""
-    main, _, _ = _load(paths)
-    merged = _flatten(_merge(_DEFAULTS, main))
-    return [(key, value) for key, value in merged if key in _KNOWN_KEYS]
+    main, _, _, settings = _load(paths)
+    values = dict(_flatten(_merge(_DEFAULTS, main)))
+    for level, profile in settings.challenge.profiles.items():
+        values[f"difficulties.{level.value}.min_terms"] = profile.min_terms
+        values[f"difficulties.{level.value}.max_terms"] = profile.max_terms
+    return [(key, value) for key, value in values.items() if key in _KNOWN_KEYS]
 
 
 def get_value(paths: ConfigPaths, key: str) -> object:
@@ -112,7 +116,7 @@ def _table(document: dict[str, Any], parents: list[str], create: bool) -> dict[s
 def _update(paths: ConfigPaths, key: str, value: object) -> None:
     """Set key to value in the user file, or remove it when value is _UNSET."""
     _check_key(key)
-    main, templates, design = _load(paths)
+    main, templates, design, _ = _load(paths)
     document = copy.deepcopy(main)
     *parents, leaf = key.split(".")
     table = _table(document, parents, create=value is not _UNSET)

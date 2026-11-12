@@ -29,8 +29,11 @@ def test_rows_show_readable_names_groups_and_values(tmp_path: Path) -> None:
             assert table.get_row("challenge.difficulty")[0].plain == "  Difficulty"
             assert table.get_row("challenge.operations")[1] == "+ − × ÷"
             assert table.get_row("features.sqrt")[1] == "off"
+            assert table.get_row("generation.brackets")[0].plain == "  Brackets in long examples"
+            assert table.get_row("generation.brackets")[1] == "on"
             keys = [row.key.value for row in table.ordered_rows]
             assert "group:Training" in keys
+            assert "group:Examples" in keys
             assert "group:Topics" in keys
             assert table.get_row("group:Training")[0].plain == "Training"
             assert table.get_row("group:Training")[0].style == "bold"
@@ -49,6 +52,19 @@ def test_enter_toggles_boolean_setting(tmp_path: Path) -> None:
             await open_setting(pilot, screen, "features.sqrt")
             await wait_until(pilot, lambda: get_value(paths, "features.sqrt") is True)
             assert screen.query_one(DataTable).get_row("features.sqrt")[1] == "on"
+
+    asyncio.run(scenario())
+
+
+def test_generation_brackets_toggle_saves_false(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        paths = ConfigPaths.from_root(tmp_path / "config")
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            screen = await open_settings(pilot, app)
+            await open_setting(pilot, screen, "generation.brackets")
+            await wait_until(pilot, lambda: get_value(paths, "generation.brackets") is False)
+            assert screen.query_one(DataTable).get_row("generation.brackets")[1] == "off"
 
     asyncio.run(scenario())
 

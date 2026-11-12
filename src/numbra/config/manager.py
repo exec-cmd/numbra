@@ -14,6 +14,11 @@ from .paths import ConfigPaths, default_config_paths
 
 # Removed levels stay readable in user files; existing files are never rewritten.
 _LEGACY_DIFFICULTIES = {"very-easy": Difficulty.EASY, "very-hard": Difficulty.HARD}
+_OLD_DEFAULT_TERMS = {
+    Difficulty.EASY: (2, 2),
+    Difficulty.NORMAL: (2, 3),
+    Difficulty.HARD: (3, 4),
+}
 
 
 class ConfigError(ValueError):
@@ -106,6 +111,7 @@ def _parse_settings(
         "difficulties",
         "features",
         "funbox",
+        "generation",
         "ui",
     }
     if unknown_root:
@@ -154,6 +160,16 @@ def _parse_settings(
             warnings.append(f"{paths.main.name}: difficulties.{legacy} is deprecated and ignored")
     features = _parse_features(main.get("features", {}), paths)
     funbox_modes = _parse_funbox(main.get("funbox", {}), paths)
+    generation = main.get("generation", {})
+    if not isinstance(generation, dict):
+        raise ConfigError(f"{paths.main.name}: generation must be a table")
+    if set(generation) - {"brackets"}:
+        raise ConfigError(
+            f"{paths.main.name}: unknown field generation.{sorted(set(generation) - {'brackets'})[0]}"
+        )
+    brackets = generation.get("brackets", defaults.brackets)
+    if type(brackets) is not bool:
+        raise ConfigError(f"{paths.main.name}: generation.brackets must be true or false")
     ui = main.get("ui", {})
     if not isinstance(ui, dict):
         raise ConfigError(f"{paths.main.name}: ui must be a table")
@@ -190,6 +206,7 @@ def _parse_settings(
             timing,
             features,
             funbox_modes=funbox_modes,
+            brackets=brackets,
         ),
         tuple(templates),
         style_values,
@@ -299,6 +316,15 @@ def _parse_profiles(value: Any, paths: ConfigPaths) -> dict[Difficulty, Difficul
                 raise ValueError(f"difficulties.{level.value} has invalid term range")
             if profile.max_result < 1:
                 raise ValueError(f"difficulties.{level.value}.max_result must be positive")
+            if (profile.min_terms, profile.max_terms) == _OLD_DEFAULT_TERMS[level]:
+                default = defaults[level]
+                profile = DifficultyConfig(
+                    profile.min_value,
+                    profile.max_value,
+                    default.min_terms,
+                    default.max_terms,
+                    profile.max_result,
+                )
             profiles[level] = profile
     except (TypeError, ValueError) as exc:
         raise ConfigError(f"{paths.main.name}: invalid difficulties field: {exc}") from exc

@@ -108,6 +108,8 @@ MESSAGES: dict[str, str] = {
     "auto follows the system locale; applies after restart": "auto использует язык системы; применяется после перезапуска",
     "Interface": "Интерфейс",
     "Language": "Язык",
+    "Brackets in long examples": "Скобки в длинных примерах",
+    "Group long additions and subtractions in brackets": "Группировать длинные сложения и вычитания скобками",
     "auto (system)": "auto (системный)",
     "English": "English",
     "Русский": "Русский",
