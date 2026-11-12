@@ -1,4 +1,4 @@
-"""Property tests for the arithmetic constructor rules (update 005, R1-R4, R9, R10)."""
+"""Property tests for the arithmetic constructor rules (update 005, R1-R7, R9, R10)."""
 
 from __future__ import annotations
 
@@ -29,8 +29,11 @@ def _session(
     seed: int,
     count: int = 40,
     operations: tuple[Operation, ...] = BASIC_OPERATIONS,
+    brackets: bool = True,
 ) -> tuple[Problem, ...]:
-    generator = ProblemGenerator(_profile(difficulty), operations, seed, difficulty=difficulty)
+    generator = ProblemGenerator(
+        _profile(difficulty), operations, seed, difficulty=difficulty, brackets=brackets
+    )
     return generator.generate_many(count)
 
 
@@ -152,9 +155,36 @@ def test_r6_permuted_exercises_keep_key_value_and_answer(difficulty: Difficulty)
         for p in problems:
             if _is_missing(p):
                 continue
-            tree = parse_expression(p.expression)
+            tree = p.as_tree()  # display-only brackets may re-associate the parsed text
             assert canonical_key(tree) == canonical_problem_key(p), p.expression
             assert tree.evaluate() == p.answer
-            assert p.as_tree().render() == p.expression
+            # visual grouping adds display-only brackets; the stored tree renders without them
+            assert re.sub(r"[()]", "", p.as_tree().render()) == re.sub(r"[()]", "", p.expression)
             swapped += permute_operands(tree, random.Random(seed)) != tree
     assert swapped, "no commutative operand order ever varied"
+
+
+@pytest.mark.parametrize("difficulty", list(Difficulty))
+def test_r7_grouped_text_keeps_value_and_stays_shallow(difficulty: Difficulty) -> None:
+    grouped = 0
+    for seed in SEEDS:
+        for p in _session(difficulty, seed, 60):
+            depth, pairs = _bracket_shape(p.expression)
+            assert depth <= 1 and pairs <= 2, p.expression
+            if _is_missing(p):
+                continue
+            assert parse_expression(p.expression).evaluate() == p.answer, p.expression
+            grouped += p.expression != p.as_tree().render()
+    assert grouped or difficulty is not Difficulty.HARD
+
+
+@pytest.mark.parametrize("difficulty", list(Difficulty))
+def test_r7_brackets_off_only_drops_display_brackets(difficulty: Difficulty) -> None:
+    for seed in SEEDS:
+        on = _session(difficulty, seed, 60)
+        off = _session(difficulty, seed, 60, brackets=False)
+        assert [(p.tree, p.answer, canonical_problem_key(p)) for p in on] == [
+            (p.tree, p.answer, canonical_problem_key(p)) for p in off
+        ]
+        for p in off:
+            assert p.tree is None or p.expression == p.tree.render() or _is_missing(p), p.expression
