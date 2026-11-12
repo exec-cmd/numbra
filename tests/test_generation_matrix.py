@@ -21,6 +21,12 @@ from numbra.core.models import Difficulty, Topic
 SEEDS = 8
 
 
+def leaves(expr: Expr) -> set[int]:
+    return (
+        {expr.value} if expr.kind == "number" else set().union(*(leaves(arg) for arg in expr.args))
+    )
+
+
 def independent(expr: Expr) -> Fraction:
     if expr.kind == "number":
         return Fraction(expr.value)
@@ -101,8 +107,14 @@ def test_seed_sample_per_difficulty_and_topic(
         keys = [canonical_problem_key(p) for p in problems]
         assert len(set(keys)) == len(keys) or session.warnings
         for p in problems:
-            assert Fraction(p.answer) == independent(p.as_tree())
-            assert Fraction(p.answer) == independent(parse_expression(p.expression))
+            if "?" in p.expression:
+                lhs, rhs = p.expression.rsplit(" = ", 1)
+                evaluated = independent(parse_expression(lhs.replace("?", str(p.answer))))
+                assert Fraction(rhs) == evaluated
+                assert p.answer in leaves(p.as_tree())
+            else:
+                assert Fraction(p.answer) == independent(p.as_tree())
+                assert Fraction(p.answer) == independent(parse_expression(p.expression))
             bands = (
                 WORK_BANDS[level]
                 if p.family == "arithmetic"

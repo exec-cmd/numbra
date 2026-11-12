@@ -40,7 +40,9 @@ def test_generated_problem_is_correct_and_division_is_integral() -> None:
     generator = ProblemGenerator(profile, tuple(Operation), 7)
     for _ in range(50):
         problem = generator.generate()
-        assert problem.answer == problem.evaluate()
+        assert problem.as_tree().evaluate() == problem.evaluate()
+        if "?" not in problem.expression:
+            assert problem.answer == problem.evaluate()
         if Operation.DIVIDE in problem.operations:
             assert problem.answer.denominator == 1
 

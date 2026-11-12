@@ -9,8 +9,16 @@ from typer.testing import CliRunner
 
 from numbra.cli import app
 from numbra.cli.input import cooldown, timed_prompt
+from numbra.core.expressions import parse_expression
 
 runner = CliRunner()
+
+
+def _matches_equation(expr: str, target) -> bool:
+    try:
+        return parse_expression(expr).evaluate() == target
+    except ValueError:
+        return False
 
 
 def test_help_and_version() -> None:
@@ -167,13 +175,24 @@ def test_challenge_prints_score_and_grade(monkeypatch, selection) -> None:
     assert "Warning:" in plain_output and "using 'easy'" in plain_output
 
 
-def _run_correct_challenge(monkeypatch, *extra: str):
+def _run_correct_challenge(monkeypatch, *extra: str, prompts: list[str] | None = None):
     from numbra.core.expressions import parse_expression
 
     cli_module = importlib.import_module("numbra.cli.app")
 
     async def correct_prompt(text, *args, **kwargs):
-        return str(parse_expression(text.removesuffix(" = ")).evaluate())
+        if prompts is not None:
+            prompts.append(text)
+        prompt = text.removesuffix(" = ")
+        if "?" in prompt:
+            lhs, rhs = prompt.rsplit(" = ", 1)
+            target = parse_expression(rhs).evaluate()
+            return next(
+                str(value)
+                for value in range(-10_000, 10_001)
+                if _matches_equation(lhs.replace("?", str(value)), target)
+            )
+        return str(parse_expression(prompt).evaluate())
 
     async def no_cooldown(*args, **kwargs):
         return None
@@ -184,6 +203,15 @@ def _run_correct_challenge(monkeypatch, *extra: str):
     result = runner.invoke(app, args)
     assert result.exit_code == 0, result.stdout
     return re.sub(r"\s+", " ", result.stdout)
+
+
+def test_missing_number_prompt_has_no_trailing_equals(monkeypatch) -> None:
+    prompts: list[str] = []
+    _run_correct_challenge(monkeypatch, "-S", "2", prompts=prompts)
+
+    missing_prompts = [prompt for prompt in prompts if "?" in prompt]
+    assert missing_prompts
+    assert all(not prompt.rstrip().endswith(" =") for prompt in missing_prompts)
 
 
 def test_first_session_prints_new_best_without_comparison(monkeypatch) -> None:
@@ -257,7 +285,16 @@ def test_results_time_uses_only_correct_answers(monkeypatch) -> None:
         attempts += 1
         if attempts == 2:
             return "wrong"
-        return str(parse_expression(text.removesuffix(" = ")).evaluate())
+        prompt = text.removesuffix(" = ")
+        if "?" in prompt:
+            lhs, rhs = prompt.rsplit(" = ", 1)
+            target = parse_expression(rhs).evaluate()
+            return next(
+                str(value)
+                for value in range(-10_000, 10_001)
+                if _matches_equation(lhs.replace("?", str(value)), target)
+            )
+        return str(parse_expression(prompt).evaluate())
 
     async def no_cooldown(*args, **kwargs):
         return None

@@ -8,6 +8,7 @@ from typing import Final
 
 from .catalog import build_arithmetic, problem, topic_catalog
 from .expressions import Expr, canonical_key, solution_steps, work_units
+from .missing import missing_number
 from .models import BASIC_OPERATIONS, Difficulty, Operation, Problem, Topic
 from .permutation import permute_operands
 from .tricks import trick_catalog
@@ -160,6 +161,8 @@ class ProblemGenerator:
         )
 
     def _apply_forms(self, p: Problem) -> Problem:
+        show = self._forms.random() < 1 / 6
+        selector = self._forms.random()
         if p.tree is not None:
             tree = permute_operands(p.as_tree(), self._forms)
             p = replace(
@@ -168,7 +171,7 @@ class ProblemGenerator:
                 expression=tree.render(),
                 solution_steps=solution_steps(tree),
             )
-        return p
+        return self._apply_missing_number(p, show, selector)
 
     def _next_level(self) -> int:
         """Spread work units evenly: each band level once per shuffled cycle."""
@@ -400,6 +403,17 @@ class ProblemGenerator:
         self._operand_counts.update(_large_numbers(p))
         self._topic_counts.update({family: 1})
         return self._apply_forms(replace(p, solution_steps=solution_steps(p.as_tree())))
+
+    def _apply_missing_number(self, p: Problem, show: bool, selector: float) -> Problem:
+        result = (
+            missing_number(p.as_tree(), random.Random(selector))
+            if p.family not in {"tricks", "funbox"}
+            else None
+        )
+        if show and result is not None:
+            text, answer, steps = result
+            return replace(p, expression=text, answer=answer, solution_steps=steps)
+        return p
 
     def generate_many(self, count: int) -> tuple[Problem, ...]:
         if count < 0:

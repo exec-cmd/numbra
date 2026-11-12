@@ -218,7 +218,7 @@ def challenge(
                 # Funbox texts end with their own question, so no "=" is added.
                 prompt = (
                     f"{problem.expression} "
-                    if session.mode == "funbox"
+                    if session.mode == "funbox" or "?" in problem.expression
                     else f"{problem.expression} = "
                 )
                 answer = asyncio.run(timed_prompt(prompt, limit, strict=session.strict))

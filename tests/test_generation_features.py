@@ -10,12 +10,18 @@ from numbra.core.challenge import (
     Challenge,
     ChallengeOptions,
 )
-from numbra.core.expressions import Expr
+from numbra.core.expressions import Expr, parse_expression
 from numbra.core.models import Difficulty, Operation, Problem, Topic
 
 
 def _settings() -> Settings:
     return Settings(ChallengeConfig(), (), {})
+
+
+def _leaves(expr: Expr) -> set[int]:
+    return (
+        {expr.value} if expr.kind == "number" else set().union(*(_leaves(arg) for arg in expr.args))
+    )
 
 
 def _kinds(problem: Problem) -> set[str]:
@@ -64,7 +70,14 @@ def test_trig_answers_are_integers_and_accepted() -> None:
     ]
     assert trig
     for _, _, problem in trig:
-        assert Fraction(problem.answer) == problem.evaluate()
+        if "?" in problem.expression:
+            lhs, rhs = problem.expression.rsplit(" = ", 1)
+            assert (
+                Fraction(rhs) == parse_expression(lhs.replace("?", str(problem.answer))).evaluate()
+            )
+            assert problem.answer in _leaves(problem.as_tree())
+        else:
+            assert Fraction(problem.answer) == problem.evaluate()
         assert Fraction(problem.answer).denominator == 1
     i, j, problem = trig[0]
     assert session.submit(i, j, str(problem.answer), 0.5).is_correct
