@@ -8,7 +8,6 @@ from numbra.i18n import (
     LANGUAGES,
     MISSES,
     PLURALS,
-    current_language,
     resolve_language,
     set_language,
     t,
@@ -85,7 +84,6 @@ def test_cli_results_remains_english(monkeypatch) -> None:
     result = CliRunner().invoke(app, ["results", "--limit", "10"])
     assert result.exit_code == 0
     assert "No completed challenges" in result.stdout
-    assert current_language() == "en"
 
 
 def test_russian_catalog_covers_static_texts() -> None:

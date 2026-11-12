@@ -90,8 +90,6 @@ class Comparison:
     previous: TrainingRecord
     score_delta: float
     accuracy_delta: float
-    average_delta: float
-    timeouts_delta: int
     correct_time_delta: float | None = None
 
 
@@ -102,8 +100,6 @@ class TrainingReport:
     topics: tuple[tuple[Topic, Tally], ...]
     comparison: Comparison | None
     average_correct_seconds: float | None
-    best_correct_seconds: float | None
-    previous_correct_seconds: float | None
     personal_best: float | None
     score_vs_best: float | None
     is_new_best: bool
@@ -173,16 +169,11 @@ def build_report(
             previous,
             completed.score_percent - previous.score_percent,
             completed.accuracy - previous.accuracy,
-            completed.average_response_seconds - previous.average_response_seconds,
-            completed.timeouts - previous.timeouts,
             None
             if completed.average_correct_seconds is None or previous.average_correct_seconds is None
             else completed.average_correct_seconds - previous.average_correct_seconds,
         )
 
-    known_times = [
-        row.average_correct_seconds for row in progress if row.average_correct_seconds is not None
-    ]
     best = max((row.score_percent for row in progress), default=None)
     score_vs_best = None if best is None else completed.score_percent - best
 
@@ -210,8 +201,6 @@ def build_report(
         ),
         comparison=comparison,
         average_correct_seconds=completed.average_correct_seconds,
-        best_correct_seconds=min(known_times, default=None),
-        previous_correct_seconds=progress[0].average_correct_seconds if progress else None,
         personal_best=best,
         score_vs_best=score_vs_best,
         is_new_best=best is None or completed.score_percent > best,

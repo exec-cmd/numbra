@@ -17,9 +17,6 @@ class ConfigPaths:
     def from_root(cls, root: Path) -> ConfigPaths:
         return cls(root, root / "numbra.toml", root / "temps.json", root / "design.toml")
 
-    def all_files(self) -> tuple[Path, ...]:
-        return self.main, self.templates, self.design
-
 
 def default_config_paths() -> ConfigPaths:
     # roaming=True keeps Windows on %APPDATA%; appauthor=False avoids a doubled folder there.

@@ -87,7 +87,6 @@ class CompletedTraining:
     attempts: tuple[AnswerAttempt, ...]
     strict: bool = False
     cooldown_seconds: float = 2.0
-    cancelled: bool = False
     topics: tuple[Topic, ...] = ()
     generation_version: int = 6
     scoring_version: int = 2

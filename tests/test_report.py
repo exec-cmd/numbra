@@ -128,8 +128,6 @@ def test_first_training_has_no_history(tmp_path: Path) -> None:
     assert report.personal_best is None
     assert report.score_vs_best is None
     assert report.is_new_best is True
-    assert report.best_correct_seconds is None
-    assert report.previous_correct_seconds is None
     assert report.average_correct_seconds == 2.0
 
 
@@ -160,9 +158,7 @@ def test_deltas_compare_with_the_previous_comparable_training(tmp_path: Path) ->
     assert report.comparison.previous.started_at == 2.0
     assert report.comparison.score_delta == pytest.approx(0.15)
     assert report.comparison.accuracy_delta == pytest.approx(0.15)
-    assert report.comparison.average_delta == pytest.approx(-2.0)
     assert report.comparison.correct_time_delta == pytest.approx(-2.0)
-    assert report.comparison.timeouts_delta == 0
 
 
 def test_correct_time_delta_is_none_when_previous_has_no_correct_answers(
@@ -175,18 +171,6 @@ def test_correct_time_delta_is_none_when_previous_has_no_correct_answers(
 
     assert report.comparison is not None
     assert report.comparison.correct_time_delta is None
-
-
-def test_correct_answer_times_use_best_and_previous_group_rows(tmp_path: Path) -> None:
-    stats = Stats(tmp_path / "times.sqlite3")
-    _finish(stats, _training(20, started_at=1.0, elapsed=2.0))
-    _finish(stats, _training(20, started_at=2.0, elapsed=4.0))
-
-    report = _finish(stats, _training(20, started_at=3.0, elapsed=3.0))
-
-    assert report.average_correct_seconds == 3.0
-    assert report.best_correct_seconds == 2.0
-    assert report.previous_correct_seconds == 4.0
 
 
 def test_tallies_by_stage_kind_operation_and_topic() -> None:

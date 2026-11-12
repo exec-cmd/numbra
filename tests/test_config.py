@@ -10,7 +10,8 @@ def test_config_manager_creates_defaults(tmp_path: Path) -> None:
     settings = manager.load_or_create()
     assert settings.challenge.duration_minutes == 6
     assert settings.language == "auto"
-    assert all(path.exists() for path in manager.paths.all_files())
+    paths = manager.paths
+    assert all(p.exists() for p in (paths.main, paths.templates, paths.design))
 
 
 def test_ui_language_setting_and_validation(tmp_path: Path) -> None:
