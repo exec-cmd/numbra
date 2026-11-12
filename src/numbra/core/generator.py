@@ -39,7 +39,7 @@ CONSTRUCTION_ATTEMPTS = 100
 # Tricks keep their own result ladder: a profile's max_result would hide most of them.
 TRICK_MAX_RESULT = {
     Difficulty.EASY: 400,
-    Difficulty.NORMAL: 12_500,
+    Difficulty.NORMAL: 2_500,
     Difficulty.HARD: 10_000,
 }
 

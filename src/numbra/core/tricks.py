@@ -205,6 +205,9 @@ def _candidates() -> Iterator[tuple[Expr, str, int]]:
                     "tens-sum-10",
                     3 if a == 1 else 4,
                 )
+    for a in range(88, 100):
+        for b in _plain(12, 26):
+            yield B("*", N(a), N(b)), "near-100", 4 if a >= 95 else 5
     for k in (12, 13, 14, 16, 17, 18):
         for x in _plain(12, 100):
             yield B("*", N(x), N(k)), "times-teens", 2 if x < 25 else 3

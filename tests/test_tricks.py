@@ -132,6 +132,20 @@ def test_tricks_only_selection(difficulty: str) -> None:
         assert abs(p.answer) <= TRICK_MAX_RESULT[level]
 
 
+def test_generated_trick_answers_respect_difficulty_limits() -> None:
+    from numbra.core.generator import TRICK_MAX_RESULT
+    from numbra.core.models import Difficulty
+
+    for difficulty in Difficulty:
+        catalog = trick_catalog(TRICK_MAX_RESULT[difficulty])
+        assert catalog
+        assert all(abs(p.answer) <= TRICK_MAX_RESULT[difficulty] for p in catalog)
+
+    assert any(p.strategy == "near-100" for p in trick_catalog(TRICK_MAX_RESULT[Difficulty.NORMAL]))
+
+    assert TRICK_MAX_RESULT[Difficulty.NORMAL] < TRICK_MAX_RESULT[Difficulty.HARD]
+
+
 def test_advanced_does_not_toggle_tricks() -> None:
     assert Topic.TRICKS not in _session(advanced=True).topics
     assert Topic.TRICKS in _session(advanced=False, features={Topic.TRICKS: True}).topics
