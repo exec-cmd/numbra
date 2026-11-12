@@ -2,32 +2,23 @@
 
 Read before changing `core/generator.py`, `core/catalog.py`, `core/tricks.py`, or `core/expressions.py`. Product rules (uniqueness, balance, bands, caps) live in `AGENTS.md`; this file records how the code meets them.
 
-## Pick order
+## Selection
 
-`ProblemGenerator._take(family)` builds a candidate window per signature group (`CANDIDATE_WINDOW` unseen problems each) and picks the lowest rank tuple, ties broken by the seeded RNG. Rank, in priority order:
+Arithmetic is constructed on demand; `_construct()` samples candidates and ranks them by operation imbalance beyond slack 2, large-operand cap violations, large-operand reuse, and exact imbalance. There is no finite arithmetic catalog or template cap. A candidate is unique by `canonical_problem_key` within the session. If no unseen candidate can be built under the selected settings, the generator repeats a built candidate and adds `Selected settings require repeated arithmetic exercises; unique catalog exhausted.` `OPERAND_REPEAT_CAP` remains 3 for operands above 12.
 
-1. operation imbalance beyond slack 2
-2. a large operand (> 12) would exceed `OPERAND_REPEAT_CAP`
-3. a template (expression shape with every number masked) would exceed `TEMPLATE_REPEAT_CAP`
-4. distance between the problem's work units and the target level
-5. trick strategy use (tricks only)
-6. total large-operand reuse
-7. exact imbalance
+Tricks and advanced topics still use finite catalogs. `_take(family)` examines a candidate window per signature group (`CANDIDATE_WINDOW` unseen problems each) and ranks by operation imbalance beyond slack 2, operand cap, distance from the target work-unit level, trick strategy use, large-operand reuse, and exact imbalance. Exhausting one of these catalogs reshuffles and reuses that family, adds its repeat warning, and preserves other families' uniqueness. `Challenge` shows a warning only when a repeat is displayed.
 
-Reordering the tuple changes every seeded sequence: treat it as a generation-version change (see Versions).
+The target level comes from `_next_level()`: a seeded, shuffled cycle over the band's available levels. `start_stage()` clears that cycle and the per-stage operation counts, so each stage spreads over the whole band. `Challenge.create_session` passes the carried-over candidate to `start_stage` so the count includes it. `generate_many` alternates arithmetic with the least-used finite family.
 
-The target level comes from `_next_level()`: a seeded, shuffled cycle over the band's available levels. `start_stage()` clears that cycle and the per-stage operation counts, so each stage spreads over the whole band. `Challenge.create_session` passes the carried-over candidate to `start_stage` so the count includes it.
+## Arithmetic construction
 
-`generate_many` alternates families: arithmetic is picked while its count is at most the advanced families' total, otherwise the least-used advanced family.
+`catalog.build_arithmetic` builds each expression on demand from a drawn term count and configured operand, operation, result, dividend, and quotient bounds. Term counts use a shuffled short bag of quotas; default weights halve for each added term, so each extra term is half as likely. If a term count cannot produce an allowed unseen exercise, it is removed from later bags. Division-only selection uses two terms. Construction allows at most one division per exercise and bounds bracket nesting to depth 1 and two pairs total. Normal and hard allow dividends up to `max_result`; easy uses `max_value`. Normal and hard reject quotients below 3.
 
-## Catalogs
+After construction, `_allowed` checks the arithmetic work-unit band and excludes round products outside easy. A failed band check discards the candidate. About one in six returned exercises hides one number as `?`; the answer is that missing number. Commutative `+` and `*` operands are permuted with a seeded forms RNG so their order varies.
 
-- `_catalog_groups` is `lru_cache`d on `(profile, operations, difficulty, topics)`. Keep every new parameter hashable, and expect a stale pool if a parameter is left out of the key.
-- It filters by work-unit band, drops round products (`_round_product`) except on `easy`, and drops small quotients (`_small_quotient`, quotient < 3) on `normal` and `hard`.
-- `accepted` rejects an additive chain of three or more terms whose values are all equal, such as `log_3 9 + log_2 4 + 2`. Both catalogs and tricks go through `accepted`.
-- Problems group by signature: `(operator counts, units)`, or `(strategy, units)` for tricks.
-- An empty family raises `GenerationError`; the CLI reports it as a configuration error (exit 2).
-- Exhausting a family refills that family's queue with a fresh shuffle, adds one warning, and leaves other families' uniqueness intact. `Challenge` shows the warning only when a repeat was actually displayed.
+Default term ranges are easy 2–3, normal 2–6, hard 3–8. Existing user files with the old default ranges (2–2, 2–3, 3–4) are read using these new defaults. `[generation] brackets` defaults to `true`, must be a boolean, and is exposed as the TUI setting `generation.brackets`.
+
+Arithmetic work-unit bands are easy 1–3, normal 2–8, hard 4–16; hard division-only uses a floor of 3. Tricks and advanced topics retain easy 1–2, normal 2–5, hard 4–9. `_catalog_groups` remains cached on `(profile, operations, difficulty, topics)` for finite families. `accepted` rejects additive chains of three or more terms whose values are all equal, such as `log_3 9 + log_2 4 + 2`.
 
 ## Topic atoms
 
@@ -43,6 +34,6 @@ The target level comes from `_next_level()`: a seeded, shuffled cycle over the b
 
 ## Versions
 
-Generated sequences and scores are stamped with `generation_version` and `scoring_version`, and `comparable_history` only matches equal stamps. Any change that alters the sequence for a seed or the score for an attempt needs a bump. The literals currently live in several places in `core/challenge.py` (`CompletedTraining` defaults, `TrainingSession.__init__`, and `"generation"`/`"scoring"` inside the settings fingerprint); change them together and confirm with a grep for `generation`.
+Generated sequences and scores are stamped with `generation_version` and `scoring_version`, and `comparable_history` only matches equal stamps. Current values are `generation_version = 7`, settings fingerprint `"generation" = 6`, and `scoring_version = 2`. Any change that alters a seeded sequence or an attempt score needs the corresponding bump. The generation version literals are in `core/challenge.py` (`CompletedTraining` defaults and `TrainingSession.__init__`); the fingerprint generation and scoring keys are set there too. Keep each stamp synchronized with the behavior it identifies.
 
 Done when the closest generator tests pass, `tests/test_generation_quality.py` and `tests/test_generation_matrix.py` still hold for default six-minute sessions, and a fixed seed reproduces its sequence across two runs.

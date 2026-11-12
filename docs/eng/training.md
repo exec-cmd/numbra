@@ -4,21 +4,21 @@
 
 Each level combines a fixed operand profile with a band of *work units*, a transparent estimate of the mental steps a problem needs (for example, a carry or a two-digit product adds a step). Difficulty never adapts to your past answers.
 
-| Level | Operands | Numbers per problem | Max result | Work units |
+| Level | Operands | Terms per problem | Max result | Arithmetic work units |
 | --- | ---: | ---: | ---: | ---: |
-| `easy` | 1–20 | 2 | 400 | 1–2 |
-| `normal` | 2–50 | 2–3 | 500 | 2–5 |
-| `hard` | 5–999 | 3–4 | 10,000 | 4–9 |
+| `easy` | 1–20 | 2–3 | 400 | 1–3 |
+| `normal` | 2–50 | 2–6 | 500 | 2–8 |
+| `hard` | 5–999 | 3–8 | 10,000 | 4–16 |
 
 Inside a stage, problems cycle through every work-unit level of the band in a shuffled order, so a stage mixes lighter and heavier problems instead of staying at one level. Selected operations stay balanced. Numbra avoids repeating a large operand (above 12): in a default six-minute session none appears more than three times, though long sessions may repeat some more often. Also, `normal` and `hard` skip divisions whose quotient is below 3.
 
-Arithmetic follows standard precedence and is exact; division never divides a value by itself, and negative intermediate values and answers are allowed. A seed reproduces the same sequence for the same settings. Exercise collections are finite: when one is exhausted, examples repeat and Numbra prints a warning.
+Arithmetic exercises vary in length and may use brackets; each has at most one division. About one in six exercises hides a number as `?`, and the answer is the missing number. Operand order varies. Arithmetic is built for the chosen seed and stays unique within a session by canonical expression; if no unseen exercise can be built, Numbra repeats one and prints a warning. Tricks and advanced topics use finite catalogs and can repeat when their catalogs run out. Division never divides a value by itself, and negative intermediate values and answers are allowed. A seed reproduces the same sequence for the same settings.
 
 Advanced topics are bounded: square roots cover perfect squares with roots 2–20; powers use bases 2–20 and exponents 2 or 3; logarithms use bases 2, 3, 5, or 10 with integer results −3 through 4; trigonometry uses exact rational values from its degree tables; identities use bounded sum and product patterns. Intermediate fractions have denominators of at most 12, and every answer is an integer.
 
 ## Tricks
 
-The `tricks` topic has twenty-four tricks; `numbra tricks` lists them. Each problem is a single trick with no extra steps, and its work units are set by the trick and the size of its numbers instead of by the general heuristic, because a trick makes large-looking numbers cheap. Tricks use their own result limits: 400 on `easy`, 2,500 on `normal`, and 10,000 on `hard`. Not every trick exists on every level, and on `hard` trick problems are worth 4–5 units. A session rotates through the available tricks, and tricks do not count toward operation balance.
+The `tricks` topic has twenty-four tricks; `numbra tricks` lists them. Each problem is a single trick with no extra steps, and its work units are set by the trick and the size of its numbers instead of by the general heuristic, because a trick makes large-looking numbers cheap. Tricks use their own work-unit bands: 1–2 on `easy`, 2–5 on `normal`, and 4–9 on `hard`; their result limits are 400 on `easy`, 2,500 on `normal`, and 10,000 on `hard`. Not every trick exists on every level, and on `hard` trick problems are worth 4–5 units. A session rotates through the available tricks, and tricks do not count toward operation balance.
 
 ## Funbox (experimental)
 

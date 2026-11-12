@@ -16,7 +16,7 @@ Numbra generates reproducible exercises, runs short timed stages, and keeps your
 
 ## Features
 
-- **Reproducible sessions.** A seed gives the same exercises every time; exercises stay unique until the catalog runs out.
+- **Reproducible sessions.** A seed gives the same exercises every time; exercises stay unique within a session.
 - **Three difficulties.** `easy`, `normal`, and `hard`, with transparent static profiles.
 - **Timed stages.** Slow, normal, and fast stages. Soft mode keeps input open past the limit and lowers the score; `--strict` ends the attempt at the limit.
 - **Beyond `+ − × ÷`.** Optional square roots, trigonometry, logarithms, powers, identities, and mental-math **tricks** such as `43 * 11` or `97 * 94`.
