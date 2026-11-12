@@ -117,13 +117,13 @@ def test_selection_parses_tricks() -> None:
 
 @pytest.mark.parametrize("difficulty", ["easy", "normal", "hard"])
 def test_tricks_only_selection(difficulty: str) -> None:
-    from numbra.core.generator import TRICK_MAX_RESULT, WORK_BANDS, complexity_score
+    from numbra.core.generator import TRICK_MAX_RESULT, TRICK_WORK_BANDS, complexity_score
     from numbra.core.models import Difficulty
 
     level = Difficulty(difficulty)
     session = _session(difficulty=level, operations=(Topic.TRICKS,))
     problems = [p for stage in session.stages for p in stage.problems]
-    low, high = WORK_BANDS[level]
+    low, high = TRICK_WORK_BANDS[level]
     assert session.topics == (Topic.TRICKS,)
     assert problems
     for p in problems:

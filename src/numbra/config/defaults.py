@@ -35,19 +35,19 @@ limit_seconds = 15
 min_value = 1
 max_value = 20
 min_terms = 2
-max_terms = 2
+max_terms = 3
 max_result = 400
 [difficulties.normal]
 min_value = 2
 max_value = 50
 min_terms = 2
-max_terms = 3
+max_terms = 6
 max_result = 500
 [difficulties.hard]
 min_value = 5
 max_value = 999
 min_terms = 3
-max_terms = 4
+max_terms = 8
 max_result = 10000
 
 [ui]

@@ -367,9 +367,9 @@ def test_results_weak_spots_list_missed_operations(monkeypatch) -> None:
 
     monkeypatch.setattr(cli_module, "timed_prompt", wrong_prompt)
     monkeypatch.setattr(cli_module, "cooldown", no_cooldown)
-    # Seed 2 gives three examples with five additions, enough for a weak spot (five attempts).
+    # At two minutes, seed 2 gives seven additions, enough for a weak spot (five attempts).
     challenge = runner.invoke(
-        app, ["challenge", "-t", "1", "-n", "1", "-o", "+", "--cooldown", "1", "-S", "2"]
+        app, ["challenge", "-t", "2", "-n", "1", "-o", "+", "--cooldown", "1", "-S", "2"]
     )
     assert challenge.exit_code == 0, challenge.stdout
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections import Counter
 from fractions import Fraction
 
+import pytest
+
 from numbra.config.models import ChallengeConfig, Settings
 from numbra.core.challenge import (
     Challenge,
@@ -21,6 +23,10 @@ def _kinds(problem: Problem) -> set[str]:
         return {node.kind}.union(*(visit(child) for child in node.args))
 
     return visit(problem.as_tree())
+
+
+def _count_kind(node: Expr, kind: str) -> int:
+    return (node.kind == kind) + sum(_count_kind(child, kind) for child in node.args)
 
 
 def test_enabled_function_topics_produce_their_functions() -> None:
@@ -64,9 +70,32 @@ def test_trig_answers_are_integers_and_accepted() -> None:
     assert session.submit(i, j, str(problem.answer), 0.5).is_correct
 
 
-def test_hard_division_has_constructive_multi_step_tasks() -> None:
+@pytest.mark.parametrize(
+    ("operation", "difficulty"),
+    ((Operation.MULTIPLY, Difficulty.HARD), (Operation.DIVIDE, Difficulty.EASY)),
+)
+def test_single_operation_sessions_generate_bounded_integer_answers(
+    operation: Operation, difficulty: Difficulty
+) -> None:
+    session = Challenge(_settings()).create_session(
+        ChallengeOptions(seed=42, difficulty=difficulty, operations=(operation,))
+    )
+    problems = [problem for stage in session.stages for problem in stage.problems]
+    maximum = _settings().challenge.profiles[difficulty].max_result
+
+    assert problems
+    assert all(Fraction(problem.answer).denominator == 1 for problem in problems)
+    assert all(abs(problem.answer) <= maximum for problem in problems)
+    if operation is Operation.DIVIDE:
+        assert any("repeated arithmetic exercises" in warning for warning in session.warnings)
+
+
+def test_hard_division_only_generates_integer_answers_with_at_most_one_division() -> None:
     session = Challenge(_settings()).create_session(
         ChallengeOptions(seed=42, difficulty=Difficulty.HARD, operations=(Operation.DIVIDE,))
     )
-    assert all(p.evaluate().denominator == 1 for s in session.stages for p in s.problems)
-    assert all(len(p.operations) >= 2 for s in session.stages for p in s.problems)
+    problems = [problem for stage in session.stages for problem in stage.problems]
+
+    assert problems
+    assert all(Fraction(problem.answer).denominator == 1 for problem in problems)
+    assert all(_count_kind(problem.as_tree(), "/") <= 1 for problem in problems)

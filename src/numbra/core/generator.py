@@ -4,10 +4,10 @@ import random
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, replace
 from functools import lru_cache
-from typing import cast
+from typing import Final
 
-from .catalog import arithmetic_catalog, topic_catalog
-from .expressions import Expr, Key, canonical_key, solution_steps, work_units
+from .catalog import build_arithmetic, problem, topic_catalog
+from .expressions import Expr, canonical_key, solution_steps, work_units
 from .models import BASIC_OPERATIONS, Difficulty, Operation, Problem, Topic
 from .tricks import trick_catalog
 
@@ -21,30 +21,50 @@ class DifficultyProfile:
     min_value: int
     max_value: int
     min_terms: int = 2
-    max_terms: int = 2
+    max_terms: int = 3
     max_result: int = 10_000
     term_weights: tuple[tuple[int, int], ...] = ()
 
 
 # Candidates inspected per signature group when looking for unused operands.
 CANDIDATE_WINDOW = 4
+# Arithmetic sampling stops after two balanced, cap-safe alternatives.
+ARITHMETIC_CANDIDATES = 2
 # A large operand may appear this many times per session while alternatives exist.
 OPERAND_REPEAT_CAP = 3
-# A template (expression shape with numbers masked) may appear this many times per session.
-TEMPLATE_REPEAT_CAP = 2
+CONSTRUCTION_ATTEMPTS = 100
 
 # Tricks keep their own result ladder: a profile's max_result would hide most of them.
 TRICK_MAX_RESULT = {
     Difficulty.EASY: 400,
-    Difficulty.NORMAL: 2_500,
+    Difficulty.NORMAL: 12_500,
     Difficulty.HARD: 10_000,
 }
 
 WORK_BANDS = {
+    Difficulty.EASY: (1, 3),
+    Difficulty.NORMAL: (2, 8),
+    Difficulty.HARD: (4, 16),
+}
+
+TOPIC_WORK_BANDS = {
     Difficulty.EASY: (1, 2),
     Difficulty.NORMAL: (2, 5),
     Difficulty.HARD: (4, 9),
 }
+
+TRICK_WORK_BANDS = {
+    Difficulty.EASY: (1, 2),
+    Difficulty.NORMAL: (2, 5),
+    Difficulty.HARD: (4, 9),
+}
+
+# Short quotas keep stage averages steady while each refill reshuffles term counts.
+LENGTH_BAG_SIZES = {
+    Difficulty.NORMAL: 3,
+    Difficulty.HARD: 5,
+}
+DEFAULT_LENGTH_BAG_SIZE: Final = 8
 
 
 def canonical_problem_key(problem: Problem) -> tuple[object, ...]:
@@ -83,8 +103,22 @@ class ProblemGenerator:
             raise ValueError("invalid term range")
         if any(t < 2 or w <= 0 for t, w in profile.term_weights):
             raise ValueError("invalid term weights")
-        self.profile = profile
         self.operations = tuple(dict.fromkeys(Operation(op) for op in operations))
+        self.profile = (
+            replace(profile, min_terms=2) if self.operations == (Operation.DIVIDE,) else profile
+        )
+        basic = tuple(op for op in self.operations if op is not Operation.POWER)
+        self._arithmetic_operations = basic + (
+            (Operation.POWER,)
+            if difficulty is None and basic and Operation.POWER in self.operations
+            else ()
+        )
+        self.difficulty = difficulty
+        self._length_bag_size = (
+            LENGTH_BAG_SIZES.get(difficulty, DEFAULT_LENGTH_BAG_SIZE)
+            if difficulty is not None
+            else DEFAULT_LENGTH_BAG_SIZE
+        )
         self.topics = tuple(dict.fromkeys(Topic(topic) for topic in topics))
         self._random = random.Random(seed)
         self._seen: set[tuple[object, ...]] = set()
@@ -93,9 +127,14 @@ class ProblemGenerator:
         self._topic_counts: Counter[str] = Counter()
         self._operation_counts: Counter[Operation] = Counter()
         self._operand_counts: Counter[int] = Counter()
-        self._template_counts: Counter[Key] = Counter()
         self._strategy_counts: Counter[str] = Counter()
         self._cycle: deque[int] = deque()
+        self._length_bag: deque[int] = deque()
+        self._length_quota: tuple[int, ...] | None = None
+        self._failed_lengths: set[int] = set()
+        self._arithmetic_candidates: dict[tuple[object, ...], Problem] = {}
+        if self._arithmetic_operations:
+            self._refill_length_bag()
         self._groups: dict[str, list[tuple[tuple[Problem, ...], deque[Problem]]]] = defaultdict(
             list
         )
@@ -105,7 +144,8 @@ class ProblemGenerator:
                 self._random.shuffle(shuffled)
                 frozen = tuple(shuffled)
                 self._groups[family].append((frozen, deque(frozen)))
-        self._families = tuple(self._groups)
+        self._constructed = bool(self._arithmetic_operations)
+        self._families = (("arithmetic",) if self._constructed else ()) + tuple(self._groups)
         self._levels = tuple(
             sorted(
                 {
@@ -125,8 +165,139 @@ class ProblemGenerator:
             self._cycle.extend(levels)
         return self._cycle.popleft()
 
+    def _refill_length_bag(self) -> None:
+        # A weighted stage quota replaces independent length draws.
+        if self._length_quota is None:
+            available = {
+                length: weight
+                for length, weight in _length_weights(self.profile).items()
+                if weight > 0
+            }
+            total = sum(available.values())
+            quotas = {
+                length: self._length_bag_size * weight / total
+                for length, weight in available.items()
+            }
+            counts = {length: int(quota) for length, quota in quotas.items()}
+            remainder = self._length_bag_size - sum(counts.values())
+            fractions = tuple(
+                (length, quota - counts[length])
+                for length, quota in quotas.items()
+                if quota > counts[length]
+            )
+            for length, _ in sorted(fractions, key=lambda item: item[1], reverse=True)[:remainder]:
+                counts[length] += 1
+            self._length_quota = tuple(
+                length for length, count in counts.items() for _ in range(count)
+            )
+        quota = list(self._length_quota)
+        self._random.shuffle(quota)
+        self._length_bag.extend(length for length in quota if length not in self._failed_lengths)
+
+    def _construct(self, complexity_range: tuple[int, int] | None = None) -> Problem:
+        def rank(candidate: Problem) -> tuple[int, int, int, int]:
+            selected = [
+                self._operation_counts[op] + candidate.operations.count(op)
+                for op in self._arithmetic_operations
+            ]
+            imbalance = max(selected, default=0) - min(selected, default=0)
+            numbers = _large_numbers(candidate)
+            reuse = sum(self._operand_counts[n] for n in numbers)
+            overused = any(
+                self._operand_counts[n] + numbers.count(n) > OPERAND_REPEAT_CAP for n in numbers
+            )
+            return max(0, imbalance - 2), int(overused), reuse, imbalance
+
+        while True:
+            if not self._length_bag:
+                self._refill_length_bag()
+                if not self._length_bag:
+                    break
+            terms = self._length_bag.popleft()
+            candidates: list[Problem] = []
+            candidate_keys: set[tuple[object, ...]] = set()
+            preferred = 0
+            operation_weights = {
+                op: 1 / (1 + self._operation_counts[op]) for op in self._arithmetic_operations
+            }
+            for _ in range(CONSTRUCTION_ATTEMPTS):
+                tree = build_arithmetic(
+                    self._random,
+                    terms,
+                    self.profile.min_value,
+                    self.profile.max_value,
+                    self.profile.max_result,
+                    self._arithmetic_operations,
+                    operation_weights,
+                    _dividend_limit(self.profile, self.difficulty),
+                    max(
+                        self.profile.min_value,
+                        3 if self.difficulty in (Difficulty.NORMAL, Difficulty.HARD) else 2,
+                    ),
+                )
+                if tree is None:
+                    continue
+                candidate = problem(tree)
+                if not _allowed(candidate, self.difficulty):
+                    continue
+                if complexity_range is not None and not (
+                    complexity_range[0] <= complexity_score(candidate) <= complexity_range[1]
+                ):
+                    continue
+                key = canonical_problem_key(candidate)
+                self._arithmetic_candidates[key] = candidate
+                if key in candidate_keys:
+                    continue
+                candidate_keys.add(key)
+                if key in self._seen:
+                    continue
+                candidates.append(candidate)
+                candidate_rank = rank(candidate)
+                if candidate_rank[0] == candidate_rank[1] == 0:
+                    preferred += 1
+                if preferred == ARITHMETIC_CANDIDATES:
+                    break
+            if not candidates:
+                self._failed_lengths.add(terms)
+                self._length_bag = deque(length for length in self._length_bag if length != terms)
+                continue
+
+            best = min(map(rank, candidates))
+            candidate = self._random.choice([item for item in candidates if rank(item) == best])
+            key = canonical_problem_key(candidate)
+            self._seen.add(key)
+            self._last = key
+            self._operation_counts.update(candidate.operations)
+            self._operand_counts.update(_large_numbers(candidate))
+            self._topic_counts["arithmetic"] += 1
+            return replace(candidate, solution_steps=solution_steps(candidate.as_tree()))
+        if self._arithmetic_candidates:
+            warning = (
+                "Selected settings require repeated arithmetic exercises; unique catalog exhausted."
+            )
+            if warning not in self.warnings:
+                self.warnings.append(warning)
+            different = [
+                p
+                for p in self._arithmetic_candidates.values()
+                if canonical_problem_key(p) != self._last
+            ]
+            choices = different or list(self._arithmetic_candidates.values())
+            best = min(map(rank, choices))
+            candidate = self._random.choice([p for p in choices if rank(p) == best])
+            self._last = canonical_problem_key(candidate)
+            self._operation_counts.update(candidate.operations)
+            self._operand_counts.update(_large_numbers(candidate))
+            self._topic_counts["arithmetic"] += 1
+            return replace(candidate, solution_steps=solution_steps(candidate.as_tree()))
+        raise GenerationError(
+            "No arithmetic exercises satisfy operand, term, result and effort limits"
+        )
+
     def generate(self, complexity_range: tuple[int, int] | None = None) -> Problem:
         if complexity_range is not None:
+            if self._constructed:
+                return self._construct(complexity_range)
             possible = [
                 p
                 for groups in self._groups.values()
@@ -143,6 +314,8 @@ class ProblemGenerator:
         return self.generate_many(1)[0]
 
     def _take(self, family: str) -> Problem:
+        if family == "arithmetic":
+            return self._construct()
         groups = self._groups[family]
         tricks = family == Topic.TRICKS.value
         target = self._next_level()
@@ -168,12 +341,10 @@ class ProblemGenerator:
                 overused = any(
                     self._operand_counts[n] + numbers.count(n) > OPERAND_REPEAT_CAP for n in numbers
                 )
-                template_overused = self._template_counts[_template(p)] >= TEMPLATE_REPEAT_CAP
                 # Slack of 2 lets multi-step levels (e.g. "a - b - c") in; later picks rebalance.
                 rank = (
                     max(0, imbalance - 2),
                     int(overused),
-                    int(template_overused),
                     abs(complexity_score(p) - 2 - target),
                     self._strategy_counts[p.strategy] if tricks else 0,
                     reuse,
@@ -210,7 +381,6 @@ class ProblemGenerator:
         else:
             self._operation_counts.update(p.operations)
         self._operand_counts.update(_large_numbers(p))
-        self._template_counts[_template(p)] += 1
         self._topic_counts.update({family: 1})
         return replace(p, solution_steps=solution_steps(p.as_tree()))
 
@@ -220,7 +390,7 @@ class ProblemGenerator:
         problems = []
         advanced = [f for f in self._families if f != "arithmetic"]
         for _ in range(count):
-            if "arithmetic" not in self._groups:
+            if "arithmetic" not in self._families:
                 family = min(advanced, key=lambda f: self._topic_counts[f])
             elif not advanced or self._topic_counts["arithmetic"] <= sum(
                 self._topic_counts[f] for f in advanced
@@ -235,6 +405,14 @@ class ProblemGenerator:
         """Reset local operator balance and level cycle, counting a carried candidate."""
         self._operation_counts.clear()
         self._cycle.clear()
+        self._failed_lengths.clear()
+        self._length_bag.clear()
+        self._refill_length_bag()
+        if pending is not None and pending.family == "arithmetic":
+            try:
+                self._length_bag.remove(len(pending.operations) + 1)
+            except ValueError:
+                self._length_bag.pop()
         # Tricks stay outside operation balance, carried over or not (see _take).
         if pending is not None and pending.family != Topic.TRICKS.value:
             self._operation_counts.update(pending.operations)
@@ -256,7 +434,7 @@ def trick_levels() -> dict[str, tuple[Difficulty, ...]]:
     """Difficulty levels on which each trick has at least one problem."""
     levels: dict[str, list[Difficulty]] = {}
     for difficulty, limit in TRICK_MAX_RESULT.items():
-        low, high = WORK_BANDS[difficulty]
+        low, high = TRICK_WORK_BANDS[difficulty]
         found = {p.strategy for p in trick_catalog(limit) if low <= complexity_score(p) - 2 <= high}
         for strategy in found:
             levels.setdefault(strategy, []).append(difficulty)
@@ -277,19 +455,6 @@ def _tree_large_numbers(expr: Expr) -> tuple[int, ...]:
     return tuple(node.value for node in _nodes(expr) if node.kind == "number" and node.value > 12)
 
 
-def _template(problem: Problem) -> Key:
-    """Canonical shape with every number masked, so 2 + 3 and 4 + 5 share a template."""
-    return _mask_numbers(canonical_key(problem.as_tree()))
-
-
-@lru_cache(maxsize=65536)
-def _mask_numbers(key: Key) -> Key:
-    if key[0] == "number":
-        return ("number",)
-    children = cast(tuple[Key, ...], key[1:])
-    return (key[0], *(_mask_numbers(child) for child in children))
-
-
 def _small_quotient(problem: Problem) -> bool:
     return any(node.kind == "/" and abs(node.evaluate()) < 3 for node in _nodes(problem.as_tree()))
 
@@ -303,6 +468,33 @@ def _round_product(problem: Problem) -> bool:
     )
 
 
+def _length_weights(profile: DifficultyProfile) -> dict[int, float]:
+    lengths = range(profile.min_terms, profile.max_terms + 1)
+    configured = dict(profile.term_weights)
+    if any(length in configured for length in lengths):
+        return {length: float(configured.get(length, 0)) for length in lengths}
+    return {length: 2.0 ** -(length - profile.min_terms) for length in lengths}
+
+
+def _dividend_limit(profile: DifficultyProfile, difficulty: Difficulty | None) -> int:
+    return (
+        profile.max_result
+        if difficulty in (Difficulty.NORMAL, Difficulty.HARD)
+        else profile.max_value
+    )
+
+
+def _allowed(problem: Problem, difficulty: Difficulty | None) -> bool:
+    low, high = WORK_BANDS[difficulty] if difficulty is not None else (1, 10_000)
+    if difficulty is Difficulty.HARD and problem.operations == (Operation.DIVIDE,):
+        low = 3
+    return (
+        low <= complexity_score(problem) - 2 <= high
+        and not (difficulty is not Difficulty.EASY and _round_product(problem))
+        and not (difficulty in (Difficulty.NORMAL, Difficulty.HARD) and _small_quotient(problem))
+    )
+
+
 @lru_cache(maxsize=64)
 def _catalog_groups(
     profile: DifficultyProfile,
@@ -312,24 +504,13 @@ def _catalog_groups(
 ) -> tuple[tuple[str, tuple[tuple[Problem, ...], ...]], ...]:
     basic = tuple(op for op in operations if op is not Operation.POWER)
     pools: dict[str, tuple[Problem, ...]] = {}
-    if basic:
-        pools["arithmetic"] = arithmetic_catalog(
-            profile.min_value,
-            profile.max_value,
-            profile.min_terms,
-            profile.max_terms,
-            profile.max_result,
-            basic,
-        )
     if Operation.POWER in operations:
         legacy = topic_catalog(
             Topic.POWER, profile.min_value, profile.max_value, profile.max_result, basic, True
         )
         if difficulty is None:
-            # Legacy direct-generator calls balance ^ alongside ordinary operators.
-            pools["arithmetic"] = pools.get("arithmetic", ()) + tuple(
-                p for p in legacy if p.as_tree().kind == "^"
-            )
+            if not basic:
+                pools[Topic.POWER.value] = tuple(p for p in legacy if p.as_tree().kind == "^")
         elif Topic.POWER not in topics:
             topics += (Topic.POWER,)
     for topic in topics:
@@ -351,9 +532,17 @@ def _catalog_groups(
             Topic.POWER in topics,
             others,
         )
-    low, high = WORK_BANDS[difficulty] if difficulty is not None else (1, 10_000)
     grouped: list[tuple[str, tuple[tuple[Problem, ...], ...]]] = []
     for family, pool in pools.items():
+        low, high = (
+            (
+                TRICK_WORK_BANDS[difficulty]
+                if family == Topic.TRICKS.value
+                else TOPIC_WORK_BANDS[difficulty]
+            )
+            if difficulty is not None
+            else (1, 10_000)
+        )
         signatures: dict[tuple[object, ...], list[Problem]] = defaultdict(list)
         seen = set()
         for p in pool:

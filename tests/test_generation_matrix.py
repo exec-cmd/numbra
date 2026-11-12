@@ -9,7 +9,9 @@ from numbra.config.models import ChallengeConfig, Settings
 from numbra.core.challenge import Challenge, ChallengeOptions
 from numbra.core.expressions import Expr, parse_expression
 from numbra.core.generator import (
+    TOPIC_WORK_BANDS,
     TRICK_MAX_RESULT,
+    TRICK_WORK_BANDS,
     WORK_BANDS,
     canonical_problem_key,
     complexity_score,
@@ -101,7 +103,14 @@ def test_seed_sample_per_difficulty_and_topic(
         for p in problems:
             assert Fraction(p.answer) == independent(p.as_tree())
             assert Fraction(p.answer) == independent(parse_expression(p.expression))
-            assert WORK_BANDS[level][0] <= complexity_score(p) - 2 <= WORK_BANDS[level][1]
+            bands = (
+                WORK_BANDS[level]
+                if p.family == "arithmetic"
+                else TRICK_WORK_BANDS[level]
+                if p.family == "tricks"
+                else TOPIC_WORK_BANDS[level]
+            )
+            assert bands[0] <= complexity_score(p) - 2 <= bands[1]
             limit = (
                 TRICK_MAX_RESULT[level]
                 if p.family == "tricks"

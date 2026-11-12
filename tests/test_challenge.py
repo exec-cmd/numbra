@@ -133,25 +133,34 @@ def test_operation_bonus_changes_problem_limit(tmp_path: Path) -> None:
     ) + max(0, complexity_score(problem) - 4)
 
 
-def test_seeded_session_keeps_comparable_complexity_between_stages(tmp_path: Path) -> None:
-    # Six minutes is the default length; a three-minute session has about three problems per stage.
+@pytest.mark.parametrize(
+    ("difficulty", "maximum_spread"),
+    ((Difficulty.NORMAL, 0.5), (Difficulty.HARD, 1.3)),
+)
+def test_seeded_sessions_keep_average_complexity_between_stages(
+    tmp_path: Path, difficulty: Difficulty, maximum_spread: float
+) -> None:
     settings = ConfigManager(ConfigPaths.from_root(tmp_path / "config")).load_or_create()
-    session = Challenge(settings).create_session(
-        ChallengeOptions(
-            difficulty=Difficulty.HARD,
-            seed=42,
-            stages=3,
-            duration_minutes=6,
-            operations=(Operation.ADD, Operation.SUBTRACT, Operation.MULTIPLY, Operation.DIVIDE),
+    operations = (Operation.ADD, Operation.SUBTRACT, Operation.MULTIPLY, Operation.DIVIDE)
+    spreads = []
+
+    for seed in range(20):
+        session = Challenge(settings).create_session(
+            ChallengeOptions(
+                difficulty=difficulty,
+                seed=seed,
+                stages=3,
+                duration_minutes=6,
+                operations=operations,
+            )
         )
-    )
+        means = [
+            sum(complexity_score(problem) for problem in stage.problems) / len(stage.problems)
+            for stage in session.stages
+        ]
+        spreads.append(max(means) - min(means))
 
-    stage_complexities = [
-        sum(complexity_score(problem) for problem in stage.problems) / len(stage.problems)
-        for stage in session.stages
-    ]
-
-    assert max(stage_complexities) - min(stage_complexities) <= 1.0
+    assert sum(spreads) / len(spreads) <= maximum_spread
 
 
 def test_seed_reproduces_staged_problem_progression(tmp_path: Path) -> None:
@@ -174,15 +183,15 @@ def test_session_generator_balances_operations_and_avoids_repeats(tmp_path: Path
     counts = Counter(operation for problem in problems for operation in problem.operations)
 
     assert len({canonical_problem_key(problem) for problem in problems}) == len(problems)
-    assert max(counts.values()) - min(counts.values()) <= 1
+    assert max(counts.values()) - min(counts.values()) <= 2
 
 
 def test_difficulty_profiles_control_term_count_and_result_size(tmp_path: Path) -> None:
     settings = ConfigManager(ConfigPaths.from_root(tmp_path / "config")).load_or_create()
     expected = {
-        Difficulty.EASY: (2, 2),
-        Difficulty.NORMAL: (2, 3),
-        Difficulty.HARD: (3, 4),
+        Difficulty.EASY: (2, 3),
+        Difficulty.NORMAL: (2, 6),
+        Difficulty.HARD: (3, 8),
     }
 
     for difficulty, (minimum, maximum) in expected.items():

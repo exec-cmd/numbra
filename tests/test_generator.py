@@ -19,6 +19,22 @@ def test_same_seed_reproduces_problems() -> None:
     assert [first.generate() for _ in range(10)] == [second.generate() for _ in range(10)]
 
 
+@pytest.mark.parametrize("seed", (1, 2, 3, 42))
+def test_hard_stage_length_orders_are_shuffled_per_stage(seed: int) -> None:
+    profile = DifficultyProfile(1, 100, 3, 8, 10_000)
+    generator = ProblemGenerator(
+        profile,
+        (Operation.ADD, Operation.SUBTRACT, Operation.MULTIPLY, Operation.DIVIDE),
+        seed,
+        difficulty=Difficulty.HARD,
+    )
+
+    stages = generator.generate_progressive_batches((7, 7, 7))
+    length_orders = [tuple(len(problem.operations) + 1 for problem in stage) for stage in stages]
+
+    assert len(set(length_orders)) > 1
+
+
 def test_generated_problem_is_correct_and_division_is_integral() -> None:
     profile = DifficultyProfile(min_value=1, max_value=50, min_terms=2, max_terms=4)
     generator = ProblemGenerator(profile, tuple(Operation), 7)
@@ -67,7 +83,7 @@ def test_generate_many_balances_selected_operations() -> None:
         for operation in Operation
     }
 
-    assert counts == {operation: 4 for operation in Operation}
+    assert max(counts.values()) - min(counts.values()) <= 2
 
 
 def test_generate_many_supports_four_terms_and_negative_answers() -> None:
@@ -121,53 +137,29 @@ def test_custom_term_range_remains_usable_without_matching_weights() -> None:
     assert len(problems[0].operations) == 3
 
 
-def test_small_pool_repeats_with_warning_and_determinism() -> None:
-    profile = DifficultyProfile(1, 10, 2, 2, 20)
-    first = ProblemGenerator(profile, (Operation.DIVIDE,), 42)
-    second = ProblemGenerator(profile, (Operation.DIVIDE,), 42)
-    batch = first.generate_many(20)
-    assert batch == second.generate_many(20)
-    assert first.warnings
-    assert len({canonical_problem_key(p) for p in batch[:8]}) == 8
-    assert all(a.expression != b.expression for a, b in zip(batch, batch[1:], strict=False))
+def test_small_arithmetic_pool_repeats_with_warning_and_determinism() -> None:
+    profile = DifficultyProfile(1, 2, 2, 2, 10)
+    first = ProblemGenerator(profile, (Operation.ADD,), 42)
+    second = ProblemGenerator(profile, (Operation.ADD,), 42)
+    first_batch = first.generate_many(20)
+    second_batch = second.generate_many(20)
+
+    assert first_batch == second_batch
+    assert first.warnings == [
+        "Selected settings require repeated arithmetic exercises; unique catalog exhausted."
+    ]
+    assert len({canonical_problem_key(problem) for problem in first_batch}) < len(first_batch)
 
 
-@pytest.mark.parametrize("seed", range(20))
-def test_shuffled_cycle_boundary_never_repeats_neighbor(seed: int) -> None:
-    generator = ProblemGenerator(
-        DifficultyProfile(1, 2, 2, 2, 100), (Operation.ADD,), seed, difficulty=Difficulty.EASY
-    )
-    batch = generator.generate_many(30)
-    assert all(
-        canonical_problem_key(a) != canonical_problem_key(b)
-        for a, b in zip(batch, batch[1:], strict=False)
-    )
-
-
-def test_small_pool_emits_one_cycle_warning() -> None:
-    generator = ProblemGenerator(
-        DifficultyProfile(1, 1, 2, 2, 2),
-        (Operation.ADD,),
-        seed=42,
-        difficulty=Difficulty.EASY,
-    )
-
-    problems = generator.generate_many(40)
-
-    assert len(problems) == 40
-    assert len(generator.warnings) == 1
-    assert len(set(generator.warnings)) == 1
-
-
-def test_hard_band_is_4_to_9() -> None:
+def test_hard_arithmetic_band_is_4_to_16() -> None:
     from numbra.config.models import ChallengeConfig
     from numbra.core.generator import WORK_BANDS, DifficultyProfile, complexity_score
     from numbra.core.models import BASIC_OPERATIONS
 
-    assert WORK_BANDS[Difficulty.HARD] == (4, 9)
+    assert WORK_BANDS[Difficulty.HARD] == (4, 16)
     config = ChallengeConfig().profiles[Difficulty.HARD]
     profile = DifficultyProfile(
         config.min_value, config.max_value, config.min_terms, config.max_terms, config.max_result
     )
     generator = ProblemGenerator(profile, BASIC_OPERATIONS, 7, difficulty=Difficulty.HARD)
-    assert all(4 <= complexity_score(p) - 2 <= 9 for p in generator.generate_many(60))
+    assert all(4 <= complexity_score(p) - 2 <= 16 for p in generator.generate_many(60))

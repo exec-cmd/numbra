@@ -1,14 +1,12 @@
-"""Finite, constructive catalogs of mental-arithmetic strategies.
-
-Domains are bounded strategic samples, not scans of the configured integer range.
-A catalog is the available exercise population for a generator version.
-"""
+"""Seeded arithmetic construction and finite topic catalogs for mental arithmetic."""
 
 from __future__ import annotations
 
+import random
 from collections.abc import Iterable
 from fractions import Fraction
 from functools import lru_cache
+from math import isqrt
 
 from .expressions import (
     Expr,
@@ -89,108 +87,215 @@ def accepted(tree: Expr, max_result: int) -> bool:
         return False
 
 
-def multiplication_is_structured(a: int, b: int) -> bool:
-    return min(a, b) <= 12 or (abs(a - b) <= 18 and (a + b) % 10 == 0) or a % 10 == b % 10 == 0
-
-
-@lru_cache(maxsize=64)
-def arithmetic_catalog(
+def build_arithmetic(
+    rng: random.Random,
+    terms: int,
     minimum: int,
     maximum: int,
-    min_terms: int,
-    max_terms: int,
     max_result: int,
     operations: tuple[Operation, ...],
-) -> tuple[Problem, ...]:
-    values = sample(operands(minimum, min(maximum, max_result)), 32)
-    atoms: dict[Operation, list[Expr]] = {op: [] for op in operations}
-    for op in operations:
-        if op is Operation.DIVIDE:
-            for divisor in values:
-                if divisor < 2:
-                    continue
-                for quotient in operands(2, min(50, maximum // divisor)):
-                    dividend = divisor * quotient
-                    if minimum <= dividend <= maximum:
-                        atoms[op].append(B("/", N(dividend), N(divisor)))
+    operation_weights: dict[Operation, float],
+    dividend_limit: int,
+    quotient_minimum: int,
+) -> Expr | None:
+    """Build one bounded arithmetic tree, with division constructed from its quotient."""
+    minimum = max(1, minimum)
+    if terms < 2 or maximum < minimum or not operations:
+        return None
+
+    used_division = False
+    operation_uses: dict[Operation, int] = {op: 0 for op in operations}
+
+    def leaf(upper: int = maximum) -> Expr | None:
+        upper = min(maximum, upper)
+        return N(rng.randint(minimum, upper)) if upper >= minimum else None
+
+    def multiply(left: Expr) -> Expr | None:
+        value = left.evaluate()
+        if value.denominator != 1:
+            return None
+        upper = max_result if value == 0 else max_result // abs(value.numerator)
+        right = leaf(upper)
+        return B("*", left, right) if right is not None else None
+
+    def choose(
+        *, top: bool = False, allow_division: bool = True, allow_power: bool = False
+    ) -> Operation | None:
+        choices = tuple(
+            op
+            for op in operations
+            if (op is not Operation.DIVIDE or allow_division)
+            and (op is not Operation.POWER or allow_power)
+        )
+        if not choices:
+            return None
+        additive = tuple(op for op in choices if op in (Operation.ADD, Operation.SUBTRACT))
+        if top and additive:
+            choices = additive
+        selected = rng.choices(
+            choices,
+            weights=[
+                operation_weights.get(op, 1.0)
+                / (1 + operation_uses[op])
+                * (2 if top and op in (Operation.ADD, Operation.SUBTRACT) else 1)
+                for op in choices
+            ],
+        )[0]
+        operation_uses[selected] += 1
+        return selected
+
+    def divide(left: Expr) -> Expr | None:
+        nonlocal used_division
+        divisor_minimum = max(2, minimum)
+        if quotient_minimum > maximum:
+            return None
+        if left.kind == "number":
+            divisor_maximum = min(
+                maximum, dividend_limit // quotient_minimum, max_result // quotient_minimum
+            )
+            if divisor_maximum < divisor_minimum:
+                return None
+            divisor = rng.choice(range(divisor_minimum, divisor_maximum + 1))
+            quotient = rng.randint(
+                quotient_minimum,
+                min(maximum, dividend_limit // divisor, max_result // divisor),
+            )
+            left = N(divisor * quotient)
         else:
-            for a in values:
-                for b in values:
-                    if op is Operation.MULTIPLY and not multiplication_is_structured(a, b):
-                        continue
-                    tree = B(op.value, N(a), N(b))
-                    if accepted(tree, max_result):
-                        atoms[op].append(tree)
-    bases = {op: sample(tuple(items), 16) for op, items in atoms.items()}
-    result: dict[tuple[object, ...], Problem] = {}
+            value = left.evaluate()
+            if value.denominator != 1 or value <= 0 or value > min(dividend_limit, max_result):
+                return None
+            dividend = value.numerator
+            valid_divisors: set[int] = set()
+            # Reject an oversized dividend before the factor scan.
+            for factor in range(1, isqrt(dividend) + 1):
+                if dividend % factor:
+                    continue
+                for divisor in (factor, dividend // factor):
+                    quotient = dividend // divisor
+                    if (
+                        divisor_minimum <= divisor <= maximum
+                        and quotient_minimum <= quotient <= maximum
+                    ):
+                        valid_divisors.add(divisor)
+            if not valid_divisors:
+                return None
+            divisor = rng.choice(tuple(valid_divisors))
+        used_division = True
+        return B("/", left, N(divisor))
 
-    def add(tree: Expr, strategy: str) -> None:
-        if accepted(tree, max_result):
-            key = canonical_key(tree)
-            if key not in result:
-                result[key] = problem(tree, strategy=strategy)
+    def flat(count: int) -> Expr | None:
+        if count == 2:
+            op = choose(allow_division=not used_division, allow_power=terms == 2)
+            if op is None:
+                return None
+            if op is Operation.POWER:
+                return B("^", N(rng.randint(2, 20)), N(rng.choice((2, 3))))
+            if op is Operation.DIVIDE:
+                left = leaf()
+                return divide(left) if left is not None else None
+            if op is Operation.MULTIPLY:
+                left = leaf(isqrt(max_result))
+                return multiply(left) if left is not None else None
+            left, right = leaf(), leaf()
+            return B(op.value, left, right) if left is not None and right is not None else None
+        tree = leaf()
+        if tree is None:
+            return None
+        for _ in range(count - 1):
+            op = choose(allow_division=not used_division)
+            if op is None:
+                return None
+            if op is Operation.DIVIDE:
+                divided = divide(tree)
+                if divided is None:
+                    return None
+                tree = divided
+            elif op is Operation.MULTIPLY:
+                multiplied = multiply(tree)
+                if multiplied is None:
+                    return None
+                tree = multiplied
+            else:
+                right = leaf()
+                if right is None:
+                    return None
+                tree = B(op.value, tree, right)
+        return tree
 
-    if min_terms <= 2 <= max_terms:
-        for atom_trees in atoms.values():
-            for tree in atom_trees:
-                add(tree, "direct")
-    # Each combination adds a useful step; both expression branches can be compound.
-    for op, trees in bases.items():
-        for tree in trees:
-            for outer in operations:
-                if min_terms <= 3 <= max_terms:
-                    for number in sample(values, 8):
-                        if outer is Operation.DIVIDE:
-                            value = tree.evaluate()
-                            if number < 2 or value % number or value == number:
-                                continue
-                        add(B(outer.value, tree, N(number)), "successive-steps")
-                        if outer is not Operation.DIVIDE:
-                            add(B(outer.value, N(number), tree), "right-branch")
-                if min_terms <= 4 <= max_terms:
-                    for right in sample(bases[outer], 4):
-                        combined = B(op.value, tree, right)
-                        if op is Operation.DIVIDE:
-                            divisor_value = right.evaluate()
-                            if (
-                                divisor_value < max(2, minimum)
-                                or divisor_value > maximum
-                                or tree.evaluate() % divisor_value
-                            ):
-                                continue
-                        add(combined, "two-branches")
-                    # Homogeneous subtraction/division retain left-to-right practice.
-                    for a, b in zip(sample(values, 8), reversed(sample(values, 8)), strict=True):
-                        partial = B(outer.value, tree, N(a))
-                        combined = B(op.value, partial, N(b))
-                        if outer is Operation.DIVIDE and (a < 2 or tree.evaluate() % a):
-                            continue
-                        if op is Operation.DIVIDE and (b < 2 or partial.evaluate() % b):
-                            continue
-                        add(combined, "successive-steps")
-    # Construct division chains backwards: sampled forward chains can miss valid
-    # narrow factor combinations, especially with divisors >= 10.
-    if Operation.DIVIDE in operations:
-        divisors = tuple(range(max(2, minimum), min(maximum, max(2, minimum) + 12) + 1))
-        for first in divisors:
-            for second in divisors:
-                for quotient in range(2, 13):
-                    dividend = first * second * quotient
-                    if min_terms <= 3 <= max_terms and minimum <= dividend <= maximum:
-                        add(B("/", B("/", N(dividend), N(first)), N(second)), "successive-division")
-                    if min_terms <= 4 <= max_terms:
-                        for third in divisors[:4]:
-                            dividend4 = dividend * third
-                            if minimum <= dividend4 <= maximum:
-                                add(
-                                    B(
-                                        "/",
-                                        B("/", B("/", N(dividend4), N(first)), N(second)),
-                                        N(third),
-                                    ),
-                                    "successive-division",
-                                )
-    return tuple(result.values())
+    def grouped() -> Expr | None:
+        sizes = [3] * (terms // 3)
+        if remainder := terms % 3:
+            sizes.append(remainder)
+        rng.shuffle(sizes)
+        pieces = []
+        for size in sizes:
+            if (
+                size == 3
+                and Operation.MULTIPLY in operations
+                and any(op in operations for op in (Operation.ADD, Operation.SUBTRACT))
+                and rng.random() < 0.5
+            ):
+                inner_op = rng.choice(
+                    tuple(op for op in (Operation.ADD, Operation.SUBTRACT) if op in operations)
+                )
+                operation_uses[inner_op] += 1
+                operation_uses[Operation.MULTIPLY] += 1
+                left, right = leaf(), leaf()
+                if left is None or right is None:
+                    return None
+                pair = B(inner_op.value, left, right)
+                multiplied = multiply(pair)
+                if multiplied is None:
+                    return None
+                pieces.append(multiplied)
+            else:
+                piece = flat(size)
+                if piece is None:
+                    return None
+                pieces.append(piece)
+        tree = pieces[0]
+        for piece in pieces[1:]:
+            outer_op = choose(top=True, allow_division=False)
+            if outer_op is None:
+                return None
+            tree = B(outer_op.value, tree, piece)
+        return tree
+
+    if terms >= 4:
+        tree = grouped()
+    elif terms == 3 and rng.random() < 0.25 and Operation.MULTIPLY in operations:
+        additive = tuple(op for op in (Operation.ADD, Operation.SUBTRACT) if op in operations)
+        if additive:
+            inner_op = rng.choice(additive)
+            left, right, factor = leaf(), leaf(), leaf()
+            tree = (
+                B("*", B(inner_op.value, left, right), factor)
+                if left is not None and right is not None and factor is not None
+                else None
+            )
+        else:
+            tree = flat(terms)
+    else:
+        tree = flat(terms)
+
+    if tree is None:
+        return None
+    rendered = tree.render()
+    depth = pairs = 0
+    for character in rendered:
+        if character == "(":
+            depth += 1
+            pairs += 1
+            if depth > 1:
+                return None
+        elif character == ")":
+            depth -= 1
+    if pairs > 2 or expression_operations(tree).count("/") > 1:
+        return None
+    if not accepted(tree, max_result) or tree.evaluate().denominator != 1:
+        return None
+    return tree
 
 
 def _power(base: int, exponent: int, enabled: bool) -> Expr:

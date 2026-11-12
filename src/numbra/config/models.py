@@ -36,9 +36,9 @@ def _default_operations() -> tuple[Operation, ...]:
 
 def _default_profiles() -> dict[Difficulty, DifficultyConfig]:
     return {
-        Difficulty.EASY: DifficultyConfig(1, 20, 2, 2, 400),
-        Difficulty.NORMAL: DifficultyConfig(2, 50, 2, 3, 500),
-        Difficulty.HARD: DifficultyConfig(5, 999, 3, 4, 10_000),
+        Difficulty.EASY: DifficultyConfig(1, 20, 2, 3, 400),
+        Difficulty.NORMAL: DifficultyConfig(2, 50, 2, 6, 500),
+        Difficulty.HARD: DifficultyConfig(5, 999, 3, 8, 10_000),
     }
 
 

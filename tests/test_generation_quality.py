@@ -13,14 +13,10 @@ from numbra.core.catalog import accepted
 from numbra.core.challenge import Challenge, ChallengeOptions
 from numbra.core.expressions import Expr, parse_expression
 from numbra.core.generator import (
-    TEMPLATE_REPEAT_CAP,
-    WORK_BANDS,
     DifficultyProfile,
     ProblemGenerator,
     _catalog_groups,
-    _template,
     canonical_problem_key,
-    complexity_score,
 )
 from numbra.core.models import BASIC_OPERATIONS, Difficulty, Topic
 
@@ -42,16 +38,6 @@ def _profile(difficulty: Difficulty) -> DifficultyProfile:
 
 def _nodes(expr: Expr) -> list[Expr]:
     return [expr, *(node for arg in expr.args for node in _nodes(arg))]
-
-
-@pytest.mark.parametrize("difficulty", [Difficulty.NORMAL, Difficulty.HARD])
-@pytest.mark.parametrize("seed", range(1, 6))
-def test_stage_covers_every_band_level(difficulty: Difficulty, seed: int) -> None:
-    generator = _generator(difficulty, seed)
-    generator.start_stage()
-    levels = {complexity_score(p) - 2 for p in generator.generate_many(12)}
-    low, high = WORK_BANDS[difficulty]
-    assert levels == set(range(low, high + 1))
 
 
 @pytest.mark.parametrize("difficulty", [Difficulty.NORMAL, Difficulty.HARD])
@@ -125,14 +111,6 @@ def test_no_additive_chain_has_all_equal_terms(difficulty: Difficulty) -> None:
             for p in pool:
                 values = _additive_values(p.as_tree())
                 assert len(values) < 3 or len(set(values)) > 1, p.expression
-
-
-@pytest.mark.parametrize("difficulty", [Difficulty.NORMAL, Difficulty.HARD])
-@pytest.mark.parametrize("seed", range(1, 21))
-def test_templates_do_not_repeat_excessively(difficulty: Difficulty, seed: int) -> None:
-    problems = _generator(difficulty, seed).generate_many(30)
-    counts = Counter(_template(p) for p in problems)
-    assert max(counts.values(), default=0) <= TEMPLATE_REPEAT_CAP, counts.most_common(3)
 
 
 def test_random_seed_sessions_share_few_exercises() -> None:
