@@ -22,6 +22,9 @@ design.toml
 # Agent scratch space
 .superpowers/
 .worktrees/
+.claude/
+.agents/
+.aws/
 
 # Tool caches
 .ruff-cache/
