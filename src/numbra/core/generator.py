@@ -8,6 +8,7 @@ from typing import Final
 
 from .catalog import build_arithmetic, problem, topic_catalog
 from .expressions import Expr, canonical_key, solution_steps, work_units
+from .missing import missing_number
 from .models import BASIC_OPERATIONS, Difficulty, Operation, Problem, Topic
 from .tricks import trick_catalog
 
@@ -121,6 +122,7 @@ class ProblemGenerator:
         )
         self.topics = tuple(dict.fromkeys(Topic(topic) for topic in topics))
         self._random = random.Random(seed)
+        self._forms = random.Random(f"{seed}:forms")
         self._seen: set[tuple[object, ...]] = set()
         self._last: tuple[object, ...] | None = None
         self.warnings: list[str] = []
@@ -270,7 +272,9 @@ class ProblemGenerator:
             self._operation_counts.update(candidate.operations)
             self._operand_counts.update(_large_numbers(candidate))
             self._topic_counts["arithmetic"] += 1
-            return replace(candidate, solution_steps=solution_steps(candidate.as_tree()))
+            return self._apply_forms(
+                replace(candidate, solution_steps=solution_steps(candidate.as_tree()))
+            )
         if self._arithmetic_candidates:
             warning = (
                 "Selected settings require repeated arithmetic exercises; unique catalog exhausted."
@@ -289,7 +293,9 @@ class ProblemGenerator:
             self._operation_counts.update(candidate.operations)
             self._operand_counts.update(_large_numbers(candidate))
             self._topic_counts["arithmetic"] += 1
-            return replace(candidate, solution_steps=solution_steps(candidate.as_tree()))
+            return self._apply_forms(
+                replace(candidate, solution_steps=solution_steps(candidate.as_tree()))
+            )
         raise GenerationError(
             "No arithmetic exercises satisfy operand, term, result and effort limits"
         )
@@ -310,7 +316,7 @@ class ProblemGenerator:
                 raise GenerationError("No new exercise satisfies the requested complexity range")
             p = self._random.choice(possible)
             self._seen.add(canonical_problem_key(p))
-            return replace(p, solution_steps=solution_steps(p.as_tree()))
+            return self._apply_forms(replace(p, solution_steps=solution_steps(p.as_tree())))
         return self.generate_many(1)[0]
 
     def _take(self, family: str) -> Problem:
@@ -382,7 +388,24 @@ class ProblemGenerator:
             self._operation_counts.update(p.operations)
         self._operand_counts.update(_large_numbers(p))
         self._topic_counts.update({family: 1})
-        return replace(p, solution_steps=solution_steps(p.as_tree()))
+        return self._apply_forms(replace(p, solution_steps=solution_steps(p.as_tree())))
+
+    def _apply_missing_number(self, p: Problem) -> Problem:
+        show = self._forms.random() < 1 / 6
+        selector = self._forms.random()
+        result = (
+            missing_number(p.as_tree(), random.Random(selector))
+            if p.family not in {"tricks", "funbox"}
+            else None
+        )
+        if show and result is not None:
+            text, answer, steps = result
+            return replace(p, expression=text, answer=answer, solution_steps=steps)
+        return p
+
+    def _apply_forms(self, p: Problem) -> Problem:
+        p = self._apply_missing_number(p)
+        return p
 
     def generate_many(self, count: int) -> tuple[Problem, ...]:
         if count < 0:
