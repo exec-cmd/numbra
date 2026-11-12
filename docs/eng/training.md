@@ -10,7 +10,7 @@ Each level combines a fixed operand profile with a band of *work units*, a trans
 | `normal` | 2–50 | 2–6 | 500 | 2–8 |
 | `hard` | 5–999 | 3–8 | 10,000 | 4–16 |
 
-Inside a stage, problems cycle through every work-unit level of the band in a shuffled order, so a stage mixes lighter and heavier problems instead of staying at one level. Selected operations stay balanced. Numbra avoids repeating a large operand (above 12): in a default six-minute session none appears more than three times, though long sessions may repeat some more often. Also, `normal` and `hard` skip divisions whose quotient is below 3.
+Inside a stage, arithmetic draws term counts from a seeded per-stage weighted bag, and its work-unit level follows the built exercise. Tricks and advanced topics cycle through available work-unit levels in a seeded shuffled order. Selected operations stay balanced. Numbra avoids repeating a large operand (above 12): in a default six-minute session none appears more than three times, though long sessions may repeat some more often. Also, `normal` and `hard` skip divisions whose quotient is below 3.
 
 Arithmetic exercises vary in length and may use brackets; each has at most one division. About one in six exercises hides a number as `?`, and the answer is the missing number. Operand order varies. Arithmetic is built for the chosen seed and stays unique within a session by canonical expression; if no unseen exercise can be built, Numbra repeats one and prints a warning. Tricks and advanced topics use finite catalogs and can repeat when their catalogs run out. Division never divides a value by itself, and negative intermediate values and answers are allowed. A seed reproduces the same sequence for the same settings.
 
