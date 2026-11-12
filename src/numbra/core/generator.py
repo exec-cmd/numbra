@@ -8,6 +8,7 @@ from typing import Final
 
 from .catalog import build_arithmetic, problem, topic_catalog
 from .expressions import Expr, canonical_key, solution_steps, work_units
+from .grouping import group_terms
 from .missing import missing_number
 from .models import BASIC_OPERATIONS, Difficulty, Operation, Problem, Topic
 from .permutation import permute_operands
@@ -92,6 +93,7 @@ class ProblemGenerator:
         *,
         difficulty: Difficulty | None = None,
         topics: tuple[Topic, ...] = (),
+        brackets: bool = True,
     ) -> None:
         if not operations and not topics:
             raise ValueError("at least one operation or topic is required")
@@ -122,8 +124,10 @@ class ProblemGenerator:
             else DEFAULT_LENGTH_BAG_SIZE
         )
         self.topics = tuple(dict.fromkeys(Topic(topic) for topic in topics))
+        self._brackets = brackets
         self._random = random.Random(seed)
         self._forms = random.Random(f"{seed}:forms")
+        self._grouping = random.Random(f"{seed}:grouping")
         self._seen: set[tuple[object, ...]] = set()
         self._last: tuple[object, ...] | None = None
         self.warnings: list[str] = []
@@ -171,7 +175,9 @@ class ProblemGenerator:
                 expression=tree.render(),
                 solution_steps=solution_steps(tree),
             )
-        return self._apply_missing_number(p, show, selector)
+        p = self._apply_missing_number(p, show, selector)
+        grouped = group_terms(p.expression, self._grouping)
+        return replace(p, expression=grouped) if self._brackets else p
 
     def _next_level(self) -> int:
         """Spread work units evenly: each band level once per shuffled cycle."""

@@ -67,6 +67,26 @@ def test_generated_problems_obey_configured_operand_and_result_bounds() -> None:
     )
 
 
+def test_challenge_config_disables_visual_brackets() -> None:
+    base = ChallengeConfig()
+    challenge_config = ChallengeConfig(
+        duration_minutes=1,
+        difficulty=Difficulty.NORMAL,
+        stages=1,
+        seed=42,
+        operations=(Operation.ADD,),
+        profiles=base.profiles | {Difficulty.NORMAL: DifficultyConfig(1, 20, 4, 4, 400)},
+        stage_limits={kind: 1.0 for kind in StageKind},
+        operation_timing=OperationTimingConfig(enabled=False),
+        brackets=False,
+    )
+    session = Challenge(_settings(challenge_config)).create_session()
+    problems = [problem for stage in session.stages for problem in stage.problems]
+
+    assert problems
+    assert all("(" not in problem.expression for problem in problems)
+
+
 def test_short_budget_reports_minimum_duration() -> None:
     challenge_config = ChallengeConfig(
         operation_timing=OperationTimingConfig(True, {Operation.ADD: 50.0})
