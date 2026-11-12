@@ -59,6 +59,15 @@ def test_trick_problems_are_tagged_and_exact() -> None:
         ("36 * 125", "times-125", 4),
         ("372 / 4", "divide-by-4-or-8", 2),
         ("1672 / 8", "divide-by-4-or-8", 4),
+        ("88 * 89", "near-100", 5),
+        ("88 * 95", "near-100", 5),
+        ("41 * 41", "square-near-50", 4),
+        ("25 * 25", "square-ending-5", 2),
+        ("21 * 29", "same-decade", 3),
+        ("49 * 51", "difference-of-squares", 3),
+        ("99 * 101", "difference-of-squares", 4),
+        ("25 * 125", "times-25", 4),
+        ("46 * 15", "double-halve", 2),
         ("13 * 93", "tens-sum-10", 3),
         ("37 * 77", "tens-sum-10", 4),
         ("23 * 14", "times-teens", 2),
@@ -173,24 +182,6 @@ def test_new_tricks_have_levels() -> None:
 def test_trick_examples_are_correct(trick) -> None:
     parts = [part.strip() for part in trick.example.split("=")]
     assert parse_expression(parts[0]).evaluate() == int(parts[-1])
-
-
-@pytest.mark.parametrize(
-    ("expression", "strategy", "units"),
-    [
-        ("88 * 89", "near-100", 5),
-        ("88 * 95", "near-100", 5),
-        ("41 * 41", "square-near-50", 4),
-        ("25 * 25", "square-ending-5", 2),
-        ("21 * 29", "same-decade", 3),
-        ("49 * 51", "difference-of-squares", 3),
-        ("99 * 101", "difference-of-squares", 4),
-        ("25 * 125", "times-25", 4),
-        ("46 * 15", "double-halve", 2),
-    ],
-)
-def test_specific_tricks_keep_their_problems(expression: str, strategy: str, units: int) -> None:
-    test_trick_units_match_table(expression, strategy, units)
 
 
 def test_advanced_keeps_tricks_from_configured_operations() -> None:

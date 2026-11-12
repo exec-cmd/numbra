@@ -28,13 +28,9 @@ def test_invalid_operations_are_reported() -> None:
     assert "unsupported operation" in result.stdout
 
 
-def test_very_easy_is_not_a_cli_difficulty() -> None:
-    result = runner.invoke(app, ["challenge", "--difficulty", "very-easy"])
-    assert result.exit_code == 2
-
-
-def test_cli_rejects_very_hard() -> None:
-    result = runner.invoke(app, ["challenge", "--difficulty", "very-hard"])
+@pytest.mark.parametrize("level", ["very-easy", "very-hard"])
+def test_legacy_levels_are_not_cli_difficulties(level: str) -> None:
+    result = runner.invoke(app, ["challenge", "--difficulty", level])
     assert result.exit_code == 2
 
 

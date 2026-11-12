@@ -33,7 +33,7 @@ from numbra.core.funbox import FunboxMode
 from numbra.core.models import Difficulty, Operation, format_answer
 from numbra.core.stats import Stats
 from numbra.core.tricks import TRICKS
-from numbra.tui.app import MENU, MenuScreen, NumbraApp, terminal_theme
+from numbra.tui.app import MenuScreen, NumbraApp, terminal_theme
 from numbra.tui.funbox import FunboxSetupScreen
 from numbra.tui.results import ResultsScreen, SessionScreen
 from numbra.tui.settings import SettingsScreen
@@ -125,7 +125,6 @@ def test_menu_lists_every_entry(tmp_path: Path) -> None:
             assert isinstance(app.screen, MenuScreen)
             menu = app.screen.query_one(OptionList)
             labels = [str(menu.get_option_at_index(i).prompt) for i in range(menu.option_count)]
-            assert labels == [f"{key}  {label}" for _, label, key, _, _ in MENU]
             assert labels == [
                 "t  Train",
                 "r  Results",
