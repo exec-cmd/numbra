@@ -16,7 +16,7 @@ The target level comes from `_next_level()`: a seeded, shuffled cycle over the b
 
 After construction, `_allowed` checks the arithmetic work-unit band and excludes round products outside easy. A failed band check discards the candidate. About one in six returned exercises hides one number as `?`; the answer is that missing number. Commutative `+` and `*` operands are permuted with a seeded forms RNG so their order varies.
 
-Default term ranges are easy 2–3, normal 2–6, hard 3–8. Existing user files with the old default ranges (2–2, 2–3, 3–4) are read using these new defaults. `[generation] brackets` defaults to `true`, must be a boolean, and is exposed as the TUI setting `generation.brackets`.
+Default term ranges are easy 2–3, normal 2–6, hard 3–8. Existing user files with the old default ranges (2–2, 2–3, 3–4) are read using these new defaults. `[generation] brackets` defaults to `true`, must be a boolean, and is exposed as the TUI setting `generation.brackets`. Grouping runs after operand permutation and missing-number selection, using its own `random.Random(f"{seed}:grouping")`; it adds at most two pairs at depth one, never inside existing brackets, and does not change canonical keys or generation versions.
 
 Arithmetic work-unit bands are easy 1–3, normal 2–8, hard 4–16; hard division-only uses a floor of 3. Tricks and advanced topics retain easy 1–2, normal 2–5, hard 4–9. `_catalog_groups` remains cached on `(profile, operations, difficulty, topics)` for finite families. `accepted` rejects additive chains of three or more terms whose values are all equal, such as `log_3 9 + log_2 4 + 2`.
 

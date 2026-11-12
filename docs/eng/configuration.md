@@ -21,7 +21,7 @@ The supported difficulties are `easy`, `normal`, and `hard`. Older files that st
 
 Difficulty profiles include `min_terms` and `max_terms`. Their built-in values are 2 and 3 for `easy`, 2 and 6 for `normal`, and 3 and 8 for `hard`. Existing files that still contain the previous default ranges (2–2, 2–3, and 3–4) are read using these new defaults.
 
-The `[generation]` table has the boolean `brackets` key, which defaults to `true`. It is also editable as `generation.brackets` in the interactive Settings screen.
+The `[generation]` table has the boolean `brackets` key, which defaults to `true`. It adds display-only grouping brackets around runs of terms; turning it on or off leaves values, answers, and the exercise sequence unchanged. It is also editable as `generation.brackets` in the interactive Settings screen.
 
 The `[funbox]` table holds `modes = []`, a list of experimental funbox modes (`fractions`, `substitution`, `equations`, `logic`, `derivatives`). Numbra checks the names when it reads the file and reports an unknown mode with `funbox.modes`. The interactive Funbox screen starts with these modes checked. `numbra challenge --funbox` does not read this list; it uses the modes given on its command line. See [Training rules](training.md#funbox-experimental).
 
