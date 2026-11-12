@@ -19,6 +19,22 @@ def test_same_seed_reproduces_problems() -> None:
     assert [first.generate() for _ in range(10)] == [second.generate() for _ in range(10)]
 
 
+def test_brackets_toggle_changes_only_expression_and_keeps_keys() -> None:
+    profile = DifficultyProfile(1, 20, 4, 4)
+    grouped = ProblemGenerator(profile, (Operation.ADD, Operation.SUBTRACT), 42)
+    plain = ProblemGenerator(profile, (Operation.ADD, Operation.SUBTRACT), 42, brackets=False)
+    grouped_problems = grouped.generate_many(20)
+    plain_problems = plain.generate_many(20)
+
+    assert [p.expression.replace("(", "").replace(")", "") for p in grouped_problems] == [
+        p.expression.replace("(", "").replace(")", "") for p in plain_problems
+    ]
+    assert [canonical_problem_key(p) for p in grouped_problems] == [
+        canonical_problem_key(p) for p in plain_problems
+    ]
+    assert [p.answer for p in grouped_problems] == [p.answer for p in plain_problems]
+
+
 @pytest.mark.parametrize("seed", (1, 2, 3, 42))
 def test_hard_stage_length_orders_are_shuffled_per_stage(seed: int) -> None:
     profile = DifficultyProfile(1, 100, 3, 8, 10_000)

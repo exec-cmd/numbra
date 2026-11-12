@@ -306,7 +306,12 @@ class Challenge:
                 FunboxGenerator(funbox, difficulty, seed)
                 if funbox is not None
                 else ProblemGenerator(
-                    profile, operations, seed, difficulty=difficulty, topics=topics
+                    profile,
+                    operations,
+                    seed,
+                    difficulty=difficulty,
+                    topics=topics,
+                    brackets=config.brackets,
                 )
             )
             budget = minutes * 60 / stages_count
