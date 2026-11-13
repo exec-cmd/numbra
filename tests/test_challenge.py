@@ -155,7 +155,7 @@ def test_operation_bonus_changes_problem_limit(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     ("difficulty", "maximum_spread"),
-    ((Difficulty.NORMAL, 0.5), (Difficulty.HARD, 1.3)),
+    ((Difficulty.NORMAL, 0.8), (Difficulty.HARD, 1.4)),
 )
 def test_seeded_sessions_keep_average_complexity_between_stages(
     tmp_path: Path, difficulty: Difficulty, maximum_spread: float

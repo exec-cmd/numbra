@@ -69,12 +69,19 @@ def test_r1_seed_reproduces_and_seeds_rarely_share_exercises(difficulty: Difficu
 
 
 @pytest.mark.parametrize("difficulty", list(Difficulty))
-def test_r2_term_counts_stay_in_range_and_short_chains_dominate(difficulty: Difficulty) -> None:
+def test_r2_every_length_in_the_band_appears_and_counts_roughly_halve(
+    difficulty: Difficulty,
+) -> None:
     low, high = TERM_RANGES[difficulty]
-    counts = Counter(_terms(p) for seed in SEEDS for p in _session(difficulty, seed, 60))
+    counts = Counter(_terms(p) for seed in range(1, 46) for p in _session(difficulty, seed, 40))
     assert set(counts) <= set(range(low, high + 1)), counts
-    assert counts[low] == max(counts.values()), counts
-    assert counts[low] > counts[low + 1], counts
+    for length in range(low, high + 1):
+        assert counts[length] > 0, counts
+    # Halving weights give a ratio of 0.5; at 1800 draws the rarest hard tail (about 29 vs 57)
+    # has a ratio spread of ~0.11, so 0.2 and 1.0 sit 2.7 and 4.5 sigma away.
+    for length in range(low + 1, high + 1):
+        ratio = counts[length] / counts[length - 1]
+        assert 0.2 <= ratio <= 1.0, (length, counts)
 
 
 @pytest.mark.parametrize("difficulty", list(Difficulty))
@@ -129,7 +136,8 @@ def _is_missing(problem: Problem) -> bool:
 def test_r5_about_one_in_six_is_missing_number_with_unique_integer_answer(
     difficulty: Difficulty,
 ) -> None:
-    problems = [p for seed in SEEDS for p in _session(difficulty, seed, 60)]
+    # 20 seeds: 1200 exercises, binomial sigma ~1.1 points around 1/6, so 10-25% is far outside noise
+    problems = [p for seed in range(1, 21) for p in _session(difficulty, seed, 60)]
     hidden = [p for p in problems if _is_missing(p)]
     assert 0.10 <= len(hidden) / len(problems) <= 0.25, len(hidden)
     for p in hidden:
