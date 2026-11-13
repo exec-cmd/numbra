@@ -330,6 +330,23 @@ def test_invalid_config_types_report_filename_and_field(
     assert field in str(error.value)
 
 
+@pytest.mark.parametrize(
+    ("seed", "valid"),
+    [(-(1 << 63), True), ((1 << 63) - 1, True), (-(1 << 63) - 1, False), (1 << 63, False)],
+)
+def test_config_seed_must_fit_sqlite_integer_range(tmp_path: Path, seed: int, valid: bool) -> None:
+    paths = ConfigPaths.from_root(tmp_path)
+    manager = ConfigManager(paths)
+    manager.load_or_create()
+    paths.main.write_text(f"[challenge]\nseed = {seed}\n", encoding="utf-8")
+
+    if valid:
+        assert manager.load_or_create().challenge.seed == seed
+    else:
+        with pytest.raises(ConfigError, match=r"numbra\.toml.*challenge\.seed"):
+            manager.load_or_create()
+
+
 @pytest.mark.parametrize("filename", ["numbra.toml", "temps.json", "design.toml"])
 def test_invalid_file_encoding_is_a_config_error(tmp_path: Path, filename: str) -> None:
     manager = ConfigManager(ConfigPaths.from_root(tmp_path))

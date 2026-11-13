@@ -451,6 +451,14 @@ def test_funbox_markup_in_validation_error_is_escaped() -> None:
     assert "unsupported funbox mode '[bold]x[/nope]'" in result.stdout
 
 
+@pytest.mark.parametrize("seed", [-(1 << 63) - 1, 1 << 63])
+def test_challenge_rejects_seed_outside_sqlite_integer_range(seed: int) -> None:
+    result = runner.invoke(app, ["challenge", "--seed", str(seed)])
+
+    assert result.exit_code == 2
+    assert "--seed" in result.stdout
+
+
 def test_funbox_challenge_runs_a_short_session(monkeypatch) -> None:
     cli_module = importlib.import_module("numbra.cli.app")
 

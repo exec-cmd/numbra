@@ -27,7 +27,7 @@ The `[funbox]` table holds `modes = []`, a list of experimental funbox modes (`f
 
 The `[ui]` table holds `language`: `"auto"` (default) follows the `LC_ALL`, `LC_MESSAGES`, or `LANG` environment variable and picks Russian for a `ru` locale, English otherwise; `"en"` and `"ru"` fix the language. It applies to the interactive interface only, after a restart; command-line output stays English.
 
-Leave out `seed` to get a new random sequence each time. Set an integer seed when you want to repeat a generated session with matching settings.
+Leave out `seed` to get a new random sequence each time. Set an integer seed when you want to repeat a generated session with matching settings. Seeds must fit SQLite's signed 64-bit integer range (-9,223,372,036,854,775,808 to 9,223,372,036,854,775,807).
 
 ## Change settings from the command line
 

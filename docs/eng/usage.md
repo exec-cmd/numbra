@@ -48,7 +48,7 @@ Use `numbra --help`, `numbra --version`, or `numbra challenge --help` for comman
 | --- | --- | --- |
 | `-t, --duration MINUTES` | 6 minutes or saved setting | Target training length; minimum 1 minute. |
 | `-d, --difficulty LEVEL` | `normal` | `easy`, `normal`, or `hard`. |
-| `-S, --seed INTEGER` | Saved seed or a new random seed | Repeats the same generated session when other settings match. |
+| `-S, --seed INTEGER` | Saved seed or a new random seed | Signed 64-bit integer; repeats the same generated session when other settings match. |
 | `-o, --operations LIST` | `+,-,*,/` | Select operations and topics: `+,-,*,/,sqrt,trig,log,power,tricks`; `^` also means `power`. |
 | `-n, --stages INTEGER` | 3 or saved setting | Number of stages; minimum 1. |
 | `--strict` | Off | A timeout immediately ends the attempt. |

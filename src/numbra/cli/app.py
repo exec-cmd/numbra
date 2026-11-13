@@ -45,6 +45,7 @@ from ..core.models import (
     parse_operation_selection,
 )
 from ..core.report import TrainingReport, area_name, build_report, setup_label
+from ..core.seeds import validate_seed
 from ..core.stats import GroupStats, Stats
 from ..core.tricks import TRICKS
 from .input import cooldown, timed_prompt
@@ -143,6 +144,8 @@ def challenge(
     ] = None,
 ) -> None:
     try:
+        if seed is not None:
+            validate_seed(seed, "--seed")
         selected_operations = _parse_operations(operations)
         funbox_modes = parse_funbox_modes(funbox) if funbox is not None else None
         if funbox_modes is not None:

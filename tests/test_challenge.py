@@ -87,6 +87,12 @@ def test_challenge_config_disables_visual_brackets() -> None:
     assert all("(" not in problem.expression for problem in problems)
 
 
+@pytest.mark.parametrize("seed", [-(1 << 63) - 1, 1 << 63])
+def test_challenge_rejects_seed_outside_sqlite_integer_range(seed: int) -> None:
+    with pytest.raises(ValueError, match="seed must be between"):
+        Challenge(_settings()).create_session(ChallengeOptions(seed=seed))
+
+
 def test_short_budget_reports_minimum_duration() -> None:
     challenge_config = ChallengeConfig(
         operation_timing=OperationTimingConfig(True, {Operation.ADD: 50.0})

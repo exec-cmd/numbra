@@ -30,6 +30,7 @@ from .models import (
     parse_inequality,
     parse_operation_selection,
 )
+from .seeds import validate_seed
 from .stages import allocate_stage_kinds
 
 
@@ -291,6 +292,7 @@ class Challenge:
             if options.seed is not None
             else (config.seed if config.seed is not None else secrets.randbits(63))
         )
+        validate_seed(seed, "seed")
         kinds = allocate_stage_kinds(stages_count)
         profile_config = config.profiles[difficulty]
         profile = DifficultyProfile(

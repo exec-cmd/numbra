@@ -7,6 +7,7 @@ from typing import Any
 
 from ..core.funbox import FunboxMode
 from ..core.models import Difficulty, Operation, StageKind, Topic, parse_operation_selection
+from ..core.seeds import validate_seed
 from ..i18n import LANGUAGES
 from .defaults import _DEFAULT_DESIGN, _DEFAULT_TEMPLATES, _DEFAULT_TOML
 from .models import ChallengeConfig, DifficultyConfig, OperationTimingConfig, Settings
@@ -133,7 +134,11 @@ def _parse_settings(
         else:
             difficulty = Difficulty(raw_difficulty)
         seed_value = challenge.get("seed")
-        seed = None if seed_value is None else _integer(seed_value, "challenge.seed")
+        seed = (
+            None
+            if seed_value is None
+            else validate_seed(_integer(seed_value, "challenge.seed"), "challenge.seed")
+        )
         operation_values = challenge.get("operations", [item.value for item in defaults.operations])
         if not isinstance(operation_values, list) or not all(
             isinstance(item, str) for item in operation_values
