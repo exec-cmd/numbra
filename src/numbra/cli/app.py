@@ -165,7 +165,7 @@ def challenge(
         )
     except (ConfigError, ValueError) as exc:
         logger.error("Unable to start challenge: %s", exc)
-        console.print(f"[red]Configuration error:[/red] {exc}")
+        console.print(f"[red]Configuration error:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
     for warning in (*settings.warnings, *session.warnings):
         console.print(f"[yellow]Warning:[/yellow] {warning}")

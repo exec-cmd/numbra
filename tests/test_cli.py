@@ -444,6 +444,13 @@ def test_funbox_rejects_unknown_modes_and_ordinary_selection() -> None:
     assert _compact("cannot be combined with -o") in _compact(combined.stdout)
 
 
+def test_funbox_markup_in_validation_error_is_escaped() -> None:
+    result = runner.invoke(app, ["challenge", "--funbox", "[bold]x[/nope]"])
+
+    assert result.exit_code == 2
+    assert "unsupported funbox mode '[bold]x[/nope]'" in result.stdout
+
+
 def test_funbox_challenge_runs_a_short_session(monkeypatch) -> None:
     cli_module = importlib.import_module("numbra.cli.app")
 
