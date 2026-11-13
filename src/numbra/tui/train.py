@@ -365,14 +365,15 @@ class TrainSetupScreen(Screen[None]):
             clock = self._numbra().clock
             session = Challenge(settings, clock=clock).create_session(options)
         except (ConfigError, ValueError) as exc:  # GenerationError is a ValueError
-            self.query_one("#error", Static).update(Text(str(exc), style="bold red"))
+            message = t(str(exc))
+            self.query_one("#error", Static).update(Text(message, style="bold red"))
             target = (
                 "step-practise"
                 if "operation list" in str(exc) or "funbox mode" in str(exc)
                 else "step-time"
             )
             field = "practise-error" if target == "step-practise" else "time-error"
-            self.query_one(f"#{field}", Static).update(str(exc))
+            self.query_one(f"#{field}", Static).update(message)
             self._show_step(target)
             return
         warnings = (*settings.warnings, *session.warnings)

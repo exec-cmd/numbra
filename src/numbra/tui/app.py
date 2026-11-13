@@ -30,7 +30,7 @@ from ..config import (
 )
 from ..core.report import area_name
 from ..core.stats import Stats
-from ..i18n import resolve_language, set_language, t, tn
+from ..i18n import get_language, resolve_language, set_language, t, tn
 from .funbox import FunboxSetupScreen
 from .results import ResultsScreen
 from .settings import SettingsScreen
@@ -226,6 +226,7 @@ class NumbraApp(App[None]):
         sleeper: Callable[[float], Awaitable[object]] = asyncio.sleep,
     ) -> None:
         super().__init__()
+        self._previous_language = get_language()
         self.config_paths = config_paths or default_config_paths()
         self._settings_loader = settings_loader or (
             lambda: ConfigManager(self.config_paths).load_or_create()
@@ -241,6 +242,9 @@ class NumbraApp(App[None]):
         self.clock = clock
         self.sleeper = sleeper
         translate_bindings(self)
+
+    def on_unmount(self) -> None:
+        set_language(self._previous_language)
 
     def load_settings(self) -> Settings:
         return self._settings_loader()

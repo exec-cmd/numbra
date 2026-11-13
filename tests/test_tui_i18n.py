@@ -1,17 +1,125 @@
 import asyncio
 from dataclasses import replace
+from io import StringIO
+from pathlib import Path
 
+from rich.console import Console
 from test_tui import FakeClock, make_app, make_settings, plain_text, save_completed_session
-from textual.widgets import Button, Checkbox, ContentSwitcher, DataTable, Static, TabbedContent
+from textual.widgets import (
+    Button,
+    Checkbox,
+    ContentSwitcher,
+    DataTable,
+    Input,
+    Static,
+    TabbedContent,
+)
 
-from numbra.config import ConfigPaths
-from numbra.i18n import MISSES
+from numbra.cli.summary import summary_card
+from numbra.config import ConfigPaths, set_value
+from numbra.core.challenge import Challenge, ChallengeOptions
+from numbra.core.models import Operation
+from numbra.core.report import build_report
+from numbra.i18n import MISSES, set_language
 from numbra.tui.app import MenuScreen
 from numbra.tui.funbox import FunboxSetupScreen
 from numbra.tui.results import LegendScreen, ResultsScreen, SessionScreen
 from numbra.tui.settings import _LABELS, SettingEditor, SettingsScreen
 from numbra.tui.train import SummaryScreen, TrainingScreen, TrainSetupScreen
 from numbra.tui.tricks import TricksScreen
+
+
+def test_tui_restores_english_for_cli_summary_after_exit(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        set_language("en")
+        settings = make_settings(tmp_path)
+        session = Challenge(settings).create_session(
+            ChallengeOptions(seed=42, stages=1, operations=(Operation.ADD,))
+        )
+        for stage_index, stage in enumerate(session.stages):
+            for problem_index, problem in enumerate(stage.problems):
+                session.submit(stage_index, problem_index, str(problem.answer), 0)
+        completed = session.complete(1)
+        report = build_report(completed, None, [], (1, 1))
+        app = make_app(tmp_path, replace(settings, language="ru"), FakeClock())
+        async with app.run_test():
+            pass
+
+        output = StringIO()
+        Console(file=output, width=80).print(summary_card(completed, report))
+        assert "Score" in output.getvalue()
+        assert "Очки" not in output.getvalue()
+
+    asyncio.run(scenario())
+
+
+def test_fixed_validation_errors_are_translated_in_russian(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        set_language("en")
+        settings = replace(make_settings(tmp_path), language="ru")
+        app = make_app(tmp_path, settings, FakeClock())
+        async with app.run_test() as pilot:
+            await pilot.press("f")
+            await pilot.pause()
+            assert isinstance(app.screen, FunboxSetupScreen)
+            funbox = app.screen
+            funbox.query_one("#steps", ContentSwitcher).current = "step-review"
+            funbox.start()
+            await pilot.pause()
+            assert plain_text(funbox.query_one("#error", Static)) == (
+                "Выберите хотя бы один режим Funbox"
+            )
+
+            app.push_screen(SettingsScreen())
+            await pilot.pause()
+            assert isinstance(app.screen, SettingsScreen)
+            settings_screen = app.screen
+            table = settings_screen.query_one(DataTable)
+            table.move_cursor(row=table.get_row_index("challenge.stages"))
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, SettingEditor)
+            editor = app.screen
+            field = editor.query_one("#value", Input)
+            field.value = "abc"
+            await pilot.press("enter")
+            await pilot.pause()
+            assert plain_text(editor.query_one("#modal-error", Static)) == ("Введите целое число")
+
+            app.push_screen(TrainSetupScreen())
+            await pilot.pause()
+            assert isinstance(app.screen, TrainSetupScreen)
+            setup = app.screen
+            setup.query_one("#duration", Input).value = "abc"
+            setup.start()
+            await pilot.pause()
+            assert plain_text(setup.query_one("#time-error", Static)) == (
+                "Длительность должна быть целым числом"
+            )
+
+    asyncio.run(scenario())
+
+
+def test_seed_setting_has_russian_label_and_help(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        set_language("en")
+        paths = ConfigPaths.from_root(tmp_path / "config")
+        settings = replace(make_settings(tmp_path), language="ru")
+        set_value(paths, "challenge.seed", "42")
+        app = make_app(tmp_path, settings, FakeClock())
+        async with app.run_test() as pilot:
+            screen = SettingsScreen()
+            app.push_screen(screen)
+            await pilot.pause()
+            table = screen.query_one(DataTable)
+            assert table.get_row("challenge.seed")[0].plain == "  Сид"
+            table.move_cursor(row=table.get_row_index("challenge.seed"))
+            await pilot.pause()
+            assert plain_text(screen.query_one("#help", Static)) == (
+                "Число для воспроизводимой последовательности примеров."
+            )
+
+    asyncio.run(scenario())
 
 
 def test_tui_screens_render_in_russian(tmp_path) -> None:

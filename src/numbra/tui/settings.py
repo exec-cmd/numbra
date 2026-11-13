@@ -56,6 +56,11 @@ _LABELS: dict[str, tuple[str, str, str]] = {
         "Difficulty",
         "The default level for new trainings: easy, normal or hard.",
     ),
+    "challenge.seed": (
+        "Training",
+        "Seed",
+        "Seed for repeatable training exercises.",
+    ),
     "challenge.stages": (
         "Training",
         "Stages",
@@ -395,7 +400,7 @@ class SettingEditor(ModalScreen[bool]):
             try:
                 value = int(text)
             except ValueError:
-                self._error("Enter a whole number")
+                self._error(t("Enter a whole number"))
                 return
             raw = format_value(value)
         else:

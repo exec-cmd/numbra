@@ -25,6 +25,10 @@ def set_language(code: str) -> None:
     _language = code
 
 
+def get_language() -> str:
+    return _language
+
+
 def t(text: str, context: str = "") -> str:
     if _language == "en":
         return text
