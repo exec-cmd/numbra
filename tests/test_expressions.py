@@ -85,6 +85,11 @@ def test_legacy_expression_parser_preserves_precedence_and_rejects_unsafe_ast() 
             parse_expression(text)
 
 
+def test_deep_expression_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="unsupported or invalid syntax"):
+        parse_expression("+" * 1200 + "1")
+
+
 def test_exact_fraction_division_and_restricted_powers() -> None:
     assert parse_expression("1 / 3 + 1 / 6").evaluate() == Fraction(1, 2)
     assert parse_expression("(2 + 3) ^ 2").evaluate() == 25

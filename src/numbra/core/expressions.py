@@ -192,7 +192,7 @@ def parse_expression(text: str) -> Expr:
     try:
         parsed = ast.parse(normalized, mode="eval")
         return _from_ast(parsed.body)
-    except (SyntaxError, ValueError, TypeError) as exc:
+    except (SyntaxError, ValueError, TypeError, RecursionError) as exc:
         raise ValueError("expression contains unsupported or invalid syntax") from exc
 
 
