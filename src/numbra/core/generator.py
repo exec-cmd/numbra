@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from bisect import bisect_right
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, replace
 from functools import lru_cache
@@ -62,10 +63,10 @@ TRICK_WORK_BANDS = {
     Difficulty.HARD: (4, 9),
 }
 
-# Short quotas keep stage averages steady while each refill reshuffles term counts.
+# Stage-sized bags keep term counts close to their weights within each stage.
 LENGTH_BAG_SIZES = {
-    Difficulty.NORMAL: 3,
-    Difficulty.HARD: 5,
+    Difficulty.NORMAL: 8,
+    Difficulty.HARD: 8,
 }
 DEFAULT_LENGTH_BAG_SIZE: Final = 8
 
@@ -126,6 +127,7 @@ class ProblemGenerator:
         self.topics = tuple(dict.fromkeys(Topic(topic) for topic in topics))
         self._brackets = brackets
         self._random = random.Random(seed)
+        self._length_random = random.Random(f"{seed}:length")
         self._forms = random.Random(f"{seed}:forms")
         self._grouping = random.Random(f"{seed}:grouping")
         self._seen: set[tuple[object, ...]] = set()
@@ -137,7 +139,6 @@ class ProblemGenerator:
         self._strategy_counts: Counter[str] = Counter()
         self._cycle: deque[int] = deque()
         self._length_bag: deque[int] = deque()
-        self._length_quota: tuple[int, ...] | None = None
         self._failed_lengths: set[int] = set()
         self._arithmetic_candidates: dict[tuple[object, ...], Problem] = {}
         if self._arithmetic_operations:
@@ -188,33 +189,26 @@ class ProblemGenerator:
         return self._cycle.popleft()
 
     def _refill_length_bag(self) -> None:
-        # A weighted stage quota replaces independent length draws.
-        if self._length_quota is None:
-            available = {
-                length: weight
-                for length, weight in _length_weights(self.profile).items()
-                if weight > 0
-            }
+        available = {
+            length: weight
+            for length, weight in _length_weights(self.profile).items()
+            if weight > 0 and length not in self._failed_lengths
+        }
+        if available:
+            lengths = tuple(available)
             total = sum(available.values())
-            quotas = {
-                length: self._length_bag_size * weight / total
-                for length, weight in available.items()
-            }
-            counts = {length: int(quota) for length, quota in quotas.items()}
-            remainder = self._length_bag_size - sum(counts.values())
-            fractions = tuple(
-                (length, quota - counts[length])
-                for length, quota in quotas.items()
-                if quota > counts[length]
-            )
-            for length, _ in sorted(fractions, key=lambda item: item[1], reverse=True)[:remainder]:
-                counts[length] += 1
-            self._length_quota = tuple(
-                length for length, count in counts.items() for _ in range(count)
-            )
-        quota = list(self._length_quota)
-        self._random.shuffle(quota)
-        self._length_bag.extend(length for length in quota if length not in self._failed_lengths)
+            cumulative = []
+            running = 0.0
+            for length in lengths:
+                running += self._length_bag_size * available[length] / total
+                cumulative.append(running)
+            offset = self._length_random.random()
+            bag = [
+                lengths[bisect_right(cumulative, offset + slot)]
+                for slot in range(self._length_bag_size)
+            ]
+            self._length_random.shuffle(bag)
+            self._length_bag.extend(bag)
 
     def _construct(self, complexity_range: tuple[int, int] | None = None) -> Problem:
         def rank(candidate: Problem) -> tuple[int, int, int, int]:
