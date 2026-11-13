@@ -77,6 +77,22 @@ def test_write_keeps_the_file_as_the_only_artifact(paths: ConfigPaths) -> None:
     ]
 
 
+def test_write_does_not_follow_predictable_temp_symlink(paths: ConfigPaths) -> None:
+    ConfigManager(paths).load_or_create()
+    target = paths.root / "target"
+    target.write_text("preserve this", encoding="utf-8")
+    predictable_temp = paths.main.with_name(f"{paths.main.name}.tmp")
+    try:
+        predictable_temp.symlink_to(target)
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"symlinks are unavailable: {exc}")
+
+    set_value(paths, "challenge.difficulty", "hard")
+
+    assert target.read_text(encoding="utf-8") == "preserve this"
+    assert get_value(paths, "challenge.difficulty") == "hard"
+
+
 def test_invalid_value_leaves_file_unchanged_and_names_key_and_file(paths: ConfigPaths) -> None:
     ConfigManager(paths).load_or_create()
     before = paths.main.read_text(encoding="utf-8")

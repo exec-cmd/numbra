@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
+import tempfile
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -137,12 +139,20 @@ def _update(paths: ConfigPaths, key: str, value: object) -> None:
 
 def _write(path: Path, text: str) -> None:
     # Replace in one step, so a failed write never leaves a half-written config.
-    temp = path.with_name(f"{path.name}.tmp")
+    temp: Path | None = None
     try:
-        temp.write_text(text, encoding="utf-8")
-        temp.replace(path)
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent, delete=False
+        ) as file:
+            temp = Path(file.name)
+            file.write(text)
+        os.replace(temp, path)
     except OSError as exc:
-        temp.unlink(missing_ok=True)
+        if temp is not None:
+            try:
+                temp.unlink(missing_ok=True)
+            except OSError:
+                pass
         raise ConfigError(f"{path.name}: cannot write config file: {exc}") from exc
 
 
