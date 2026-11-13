@@ -9,7 +9,7 @@ from textual.containers import Vertical
 from textual.pilot import Pilot
 from textual.widgets import Button, DataTable, Input, OptionList, SelectionList, Static
 
-from numbra.config import ConfigPaths, get_value
+from numbra.config import ConfigPaths, get_value, set_value
 from numbra.tui.settings import SettingsScreen
 
 
@@ -87,6 +87,29 @@ def test_difficulty_modal_saves_hard(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
+def test_difficulty_modal_normalizes_legacy_value(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        paths = ConfigPaths.from_root(tmp_path / "config")
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            screen = await open_settings(pilot, app)
+            for legacy, canonical, selected in (
+                ("very-easy", "easy", 0),
+                ("very-hard", "hard", 2),
+            ):
+                set_value(paths, "challenge.difficulty", f'"{legacy}"')
+                await open_setting(pilot, screen, "challenge.difficulty")
+                await wait_until(pilot, lambda: app.screen is not screen)
+                editor = app.screen
+                options = editor.query_one("#value", OptionList)
+                assert options.highlighted == selected
+                await pilot.press("enter")
+                await wait_until(pilot, lambda: app.screen is screen)
+                assert get_value(paths, "challenge.difficulty") == canonical
+
+    asyncio.run(scenario())
+
+
 def test_difficulty_modal_save_button_saves_highlighted_value(tmp_path: Path) -> None:
     async def scenario() -> None:
         paths = ConfigPaths.from_root(tmp_path / "config")
@@ -122,6 +145,26 @@ def test_operations_modal_saves_selection_in_canonical_order(tmp_path: Path) -> 
             await pilot.press("enter")
             await wait_until(pilot, lambda: app.screen is screen)
             assert get_value(paths, "challenge.operations") == ["+", "*", "/"]
+
+    asyncio.run(scenario())
+
+
+def test_operations_modal_normalizes_power_alias_when_saved(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        paths = ConfigPaths.from_root(tmp_path / "config")
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        set_value(paths, "challenge.operations", '["+", "power"]')
+        async with app.run_test() as pilot:
+            screen = await open_settings(pilot, app)
+            await open_setting(pilot, screen, "challenge.operations")
+            await wait_until(pilot, lambda: app.screen is not screen)
+            editor = app.screen
+            choices = editor.query_one("#value", SelectionList)
+            assert choices.selected == ["+", "^"]
+            editor.query_one("#save", Button).focus()
+            await pilot.press("enter")
+            await wait_until(pilot, lambda: app.screen is screen)
+            assert get_value(paths, "challenge.operations") == ["+", "^"]
 
     asyncio.run(scenario())
 

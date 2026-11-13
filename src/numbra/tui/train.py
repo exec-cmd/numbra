@@ -33,6 +33,7 @@ from textual.widgets.option_list import Option, OptionDoesNotExist
 
 from ..cli.summary import summary_card
 from ..config import ConfigError, DifficultyConfig, Settings
+from ..config.manager import parse_difficulty
 from ..core.challenge import (
     Challenge,
     ChallengeOptions,
@@ -459,7 +460,7 @@ class TrainSetupScreen(Screen[None]):
         record = Stats(self._numbra().database_path).history(1)
         if record:
             try:
-                difficulty = Difficulty(record[0].difficulty)
+                difficulty = parse_difficulty(record[0].difficulty)
             except ValueError:
                 pass
             else:

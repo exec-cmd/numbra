@@ -33,8 +33,9 @@ from ..config import (
     set_value,
     unset_value,
 )
+from ..config.manager import parse_difficulty
 from ..core.funbox import FunboxMode
-from ..core.models import Difficulty, Operation
+from ..core.models import Difficulty, Operation, Topic, parse_operation_selection
 from ..core.report import OPERATION_SYMBOLS, area_name
 from ..i18n import t
 from .style import translate_bindings
@@ -322,9 +323,7 @@ class SettingEditor(ModalScreen[bool]):
             control = OptionList(
                 *(t(difficulty.value, "difficulty") for difficulty in Difficulty), id="value"
             )
-            control.highlighted = [difficulty.value for difficulty in Difficulty].index(
-                str(self.current)
-            )
+            control.highlighted = list(Difficulty).index(parse_difficulty(str(self.current)))
             return control
         if self.kind == "language":
             choices = ("auto", "en", "ru")
@@ -335,6 +334,10 @@ class SettingEditor(ModalScreen[bool]):
         if self.kind == "list":
             selected = set(self.current) if isinstance(self.current, list) else set()
             if self.key == "challenge.operations":
+                selected = {
+                    Operation.POWER.value if item is Topic.POWER else item.value
+                    for item in parse_operation_selection(cast(list[str], self.current))
+                }
                 return SelectionList(
                     *(
                         Selection(

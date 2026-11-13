@@ -1,6 +1,7 @@
 """Coverage for the setup wizard navigation and preset values."""
 
 import asyncio
+import sqlite3
 from dataclasses import replace
 from pathlib import Path
 
@@ -49,6 +50,25 @@ def test_presets_reflect_history_and_settings(tmp_path: Path) -> None:
             assert screen.query_one("#strict").value is False
             assert screen.query_one("#choices", SelectionList).selected == ["+"]
             assert screen.query_one("#steps").current == "step-review"
+
+    asyncio.run(scenario())
+
+
+def test_repeat_last_preset_maps_legacy_difficulty(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        save_completed_session(tmp_path)
+        with sqlite3.connect(tmp_path / "numbra.sqlite3") as database:
+            database.execute("UPDATE trainings SET difficulty = 'very-easy'")
+
+        app = make_app(tmp_path, make_settings(tmp_path), FakeClock())
+        async with app.run_test() as pilot:
+            screen = await open_training(pilot, app)
+            presets = screen.query_one("#presets", OptionList)
+            assert presets.get_option_at_index(0).id == "repeat"
+            presets.highlighted = 0
+            await pilot.press("enter")
+            await pilot.pause()
+            assert screen._difficulty() is Difficulty.EASY
 
     asyncio.run(scenario())
 

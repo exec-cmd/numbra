@@ -22,6 +22,10 @@ _OLD_DEFAULT_TERMS = {
 }
 
 
+def parse_difficulty(value: str) -> Difficulty:
+    return _LEGACY_DIFFICULTIES[value] if value in _LEGACY_DIFFICULTIES else Difficulty(value)
+
+
 class ConfigError(ValueError):
     """A user-facing configuration error."""
 
@@ -125,14 +129,12 @@ def _parse_settings(
         )
         stages = _integer(challenge.get("stages", defaults.stages), "challenge.stages")
         raw_difficulty = challenge.get("difficulty", defaults.difficulty)
+        difficulty = parse_difficulty(raw_difficulty)
         if raw_difficulty in _LEGACY_DIFFICULTIES:
-            difficulty = _LEGACY_DIFFICULTIES[raw_difficulty]
             warnings.append(
                 f"{paths.main.name}: challenge.difficulty '{raw_difficulty}' is deprecated; "
                 f"using '{difficulty.value}'"
             )
-        else:
-            difficulty = Difficulty(raw_difficulty)
         seed_value = challenge.get("seed")
         seed = (
             None
